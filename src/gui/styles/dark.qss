@@ -1,0 +1,58 @@
+/* Dark Theme QSS */
+QMainWindow {
+    background-color: #2b2b2b;
+    color: #ffffff;
+}
+
+QWidget {
+    background-color: #2b2b2b;
+    color: #ffffff;
+    font-family: "Segoe UI", "Arial";
+    font-size: 14px;
+}
+
+QGroupBox {
+    border: 1px solid #555555;
+    border-radius: 5px;
+    margin-top: 20px;
+    color: #dddddd;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 3px;
+    color: #aaaaaa;
+}
+
+QPushButton {
+    background-color: #3d3d3d;
+    border: 1px solid #555555;
+    border-radius: 4px;
+    padding: 5px 15px;
+    color: #ffffff;
+}
+
+QPushButton:hover {
+    background-color: #4d4d4d;
+}
+
+QPushButton:pressed {
+    background-color: #2d2d2d;
+}
+
+QCheckBox {
+    color: #dddddd;
+}
+
+QLineEdit, QSpinBox, QDoubleSpinBox {
+    background-color: #3d3d3d;
+    border: 1px solid #555555;
+    border-radius: 3px;
+    padding: 2px;
+    color: #ffffff;
+}
+
+QLabel {
+    color: #e0e0e0;
+}

@@ -1,0 +1,58 @@
+/* Light Theme QSS */
+QMainWindow {
+    background-color: #f0f0f0;
+    color: #000000;
+}
+
+QWidget {
+    background-color: #f0f0f0;
+    color: #000000;
+    font-family: "Segoe UI", "Arial";
+    font-size: 14px;
+}
+
+QGroupBox {
+    border: 1px solid #cccccc;
+    border-radius: 5px;
+    margin-top: 20px;
+    color: #333333;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top center;
+    padding: 0 3px;
+    color: #333333;
+}
+
+QPushButton {
+    background-color: #e0e0e0;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    padding: 5px 15px;
+    color: #000000;
+}
+
+QPushButton:hover {
+    background-color: #d0d0d0;
+}
+
+QPushButton:pressed {
+    background-color: #c0c0c0;
+}
+
+QCheckBox {
+    color: #333333;
+}
+
+QLineEdit, QSpinBox, QDoubleSpinBox {
+    background-color: #ffffff;
+    border: 1px solid #cccccc;
+    border-radius: 3px;
+    padding: 2px;
+    color: #000000;
+}
+
+QLabel {
+    color: #333333;
+}
