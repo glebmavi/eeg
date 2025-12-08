@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QMenu
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QMenu, QToolTip
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QAction
 import pyqtgraph as pg
@@ -41,6 +41,9 @@ class PlotWidget(QWidget):
         self.plot_item.setBackground('w')
         self.plot_item.showGrid(x=True, y=True)
         self.layout.addWidget(self.plot_item)
+
+        # Signal Proxy for Hover
+        self.proxy = pg.SignalProxy(self.plot_item.scene().sigMouseMoved, rateLimit=60, slot=self.on_mouse_move) # AttributeError: 'PlotWidget' object has no attribute 'on_mouse_move'
 
         self.raw_data = None
         self.processed_data = None
@@ -95,6 +98,17 @@ class PlotWidget(QWidget):
         super().mousePressEvent(event)
 
     def contextMenuEvent(self, event):
+        # Strict logic: Only show window menu if click is in top_bar
+        child = self.childAt(event.pos())
+        
+        # Check if click is on top_bar or its children
+        if child and (child == self.top_bar or self.top_bar.isAncestorOf(child)):
+             self.show_window_menu(event.globalPos())
+        else:
+            # Let standard logic apply (PyQtGraph handles its own)
+            pass
+            
+    def show_window_menu(self, pos):
         menu = QMenu(self)
         
         # Analysis Group
@@ -119,7 +133,7 @@ class PlotWidget(QWidget):
         menu.addSeparator()
         menu.addAction(close_view)
         
-        menu.exec(event.globalPos())
+        menu.exec(pos)
 
     def set_active(self, active: bool):
         self.is_active = active
@@ -171,6 +185,8 @@ class PlotWidget(QWidget):
             
         self.processed_data = temp
         self.update_plot()
+        # Auto-zoom after processing
+        self.plot_item.autoRange()
 
     def show_spectrum(self):
         if self.processed_data is None: 
@@ -197,6 +213,10 @@ class PlotWidget(QWidget):
             del self.rhythm_curves[rhythm_type]
             
         if not enabled:
+            # If disabling a rhythm, we may want to auto-zoom to remaining content, 
+            # but usually auto-zoom is strictly requested on "apply" actions. 
+            # The user asked: "Each new checkbox apply... should change zoom". 
+            self.plot_item.autoRange()
             return
 
         # Calculate Rhythm
@@ -225,32 +245,101 @@ class PlotWidget(QWidget):
         # Plot on top
         curve = self.plot_item.plot(times, data, pen=pg.mkPen(color, width=2))
         self.rhythm_curves[rhythm_type] = curve
+        
+        self.plot_item.autoRange()
 
     def toggle_peaks(self, enabled: bool):
         if self.peak_scatter:
             self.plot_item.removeItem(self.peak_scatter)
             self.peak_scatter = None
             
-        if not enabled or self.processed_data is None:
+        if not enabled:
+            if self.processed_data is not None:
+                 self.plot_item.autoRange()
             return
+        
+        if self.processed_data is None:
+            return
+
+        # Requirement: "if peaks are selected, then no brain waves should be shown"
+        # We clear any existing rhythms
+        keys = list(self.rhythm_curves.keys())
+        for r_type in keys:
+            self.plot_item.removeItem(self.rhythm_curves[r_type])
+            del self.rhythm_curves[r_type]
             
-        data = self.processed_data.get_data()[self.current_ch_index] * 1e6
+        # Requirement: "...except the raw data line, and add it, if it's not shown"
+        if self.main_curve is None:
+            self.update_plot() # This re-creates main_curve and ensures it's shown
+        
+        # Ensure we use the exact same logic as update_plot for data consistency
+        data = self.processed_data.get_data()[self.current_ch_index]
         times = self.processed_data.times
         
+        # Determine Scaling used in update_plot to match visual
+        scaling_factor = 1e6 # Default uV
+        if self.raw_data and self.raw_data.info.get('description') == "Raw/ADC":
+            # Raw/ADC case: No scaling, just centering
+            # Replicate update_plot logic strictly
+            data = data - np.mean(data)
+            scaling_factor = 1.0 # It's already raw units
+        else:
+            data = data * scaling_factor
+            
         # Heuristic height: > 2 std dev
         height = np.std(data) * 2
         peaks, _ = SignalProcessor.detect_peaks(data, height=height, distance=50)
         
         if len(peaks) > 0:
-            self.peak_scatter = pg.ScatterPlotItem(x=times[peaks], y=data[peaks], pen='r', brush='r', size=8)
+            # Visual points MUST be on top of the line
+            self.peak_scatter = pg.ScatterPlotItem(x=times[peaks], y=data[peaks], pen='r', brush='r', size=10, hoverable=True)
+            # self.peak_scatter.setTip(None)  <-- Removed invalid call
             self.plot_item.addItem(self.peak_scatter)
+            
+        self.plot_item.autoRange()
+
+    def on_mouse_move(self, evt):
+        pos = evt[0]  # using signal proxy turns original arguments into a tuple
+        if self.plot_item.sceneBoundingRect().contains(pos):
+            mouse_point = self.plot_item.plotItem.vb.mapSceneToView(pos)
+            x_val = mouse_point.x()
+            y_val = mouse_point.y()
+            
+            # Use current unit or default
+            unit = getattr(self, 'current_unit', 'uV')
+
+            # Check for Peaks Hover
+            is_peak = False
+            peak_val = 0.0
+            
+            if self.peak_scatter is not None:
+                # pointsAt uses scene pos
+                points = self.peak_scatter.pointsAt(pos)
+                if len(points) > 0:
+                    is_peak = True
+                    # Get the point's data
+                    # point.pos().y() gives the value
+                    peak_val = points[0].pos().y()
+
+            # Tooltip Text
+            view_pos = self.plot_item.mapFromScene(pos)
+            global_pos = self.plot_item.mapToGlobal(view_pos)
+            
+            if is_peak:
+                # Show Peak Value
+                QToolTip.showText(global_pos, f"PEAK DETECTED\nTime: {x_val:.3f} s\nValue: {peak_val:.2f} {unit}", self.plot_item)
+            else:
+                # Show Signal Value
+                QToolTip.showText(global_pos, f"Time: {x_val:.3f} s\nAmp: {y_val:.2f} {unit}", self.plot_item)
 
     def apply_theme(self, is_dark: bool):
+        self.is_dark = is_dark # Store for update_plot usage
         if is_dark:
             self.plot_item.setBackground('#2b2b2b')
-            # self.plot_item.getAxis('bottom').setPen('#ffffff') # Optional polish
         else:
             self.plot_item.setBackground('w')
+        # Re-plot to update pen colors if needed
+        self.update_plot()
 
     def update_plot(self):
         if self.processed_data is None:
@@ -266,22 +355,25 @@ class PlotWidget(QWidget):
         
         # Pick just the current channel
         if self.current_ch_index < len(data):
+            valid_data = data[self.current_ch_index]
+            
             # Check scaling
-            scaling = 1e6 # Default MNE Volts -> uV
-            if self.raw_data.info.get('description') == "Raw/ADC":
-                scaling = 1.0
+            if self.raw_data and self.raw_data.info.get('description') == "Raw/ADC":
+                # Raw integer data: Center it to 0 so it's visible along with uV data
+                valid_data = valid_data - np.mean(valid_data)
+                self.current_unit = "ADC"
+                self.plot_item.setLabel('left', "Amplitude (ADC Centered)")
+            else:
+                # Standard MNE Volts -> uV
+                valid_data = valid_data * 1e6
+                self.current_unit = "uV"
+                self.plot_item.setLabel('left', "Amplitude (uV)")
             
-            valid_data = data[self.current_ch_index] * scaling 
-            
-            # Choose Pen Color based on theme/default
-            # Simple black/white contrast handled by pyqtgraph usually if k is black.
-            # If dark theme, 'k' (black) might be invisible on dark bg.
-            # We should make pen adaptive or use a color that works on both (like cyan/green) or check theme.
-            # For now, default 'd' (default) might be better or adaptive.
-            # 'w' for white, 'k' for black.
-            # Let's check background.
-            bg = self.plot_item.backgroundBrush.color().name() if hasattr(self.plot_item.backgroundBrush, 'color') else 'w'
-            pen_color = 'w' if bg == '#2b2b2b' else 'k'
+            # Choose Pen Color based on theme
+            if hasattr(self, 'is_dark') and self.is_dark:
+                 pen_color = '#dddddd'
+            else:
+                 pen_color = '#050505'
             
             self.main_curve = self.plot_item.plot(times, valid_data, pen=pen_color)
         else:

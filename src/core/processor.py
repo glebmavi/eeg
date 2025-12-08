@@ -57,15 +57,13 @@ class SignalProcessor:
     def detect_peaks(data: np.ndarray, height: float = None, distance: int = None) -> tuple:
         """
         Detect peaks in a 1D signal array (e.g., one channel).
-        
-        Args:
-            data (np.ndarray): 1D array of signal data.
-            height (float, optional): Required height of peaks.
-            distance (int, optional): Required minimal horizontal distance (>= 1) in samples between neighbouring peaks.
-            
-        Returns:
-            peaks (np.ndarray): Indices of peaks in `data`.
-            properties (dict): Properties of the peaks.
         """
+        if data is None or len(data) == 0:
+            return np.array([]), {}
+            
+        # Safety check for flat signal
+        if np.all(data == data[0]):
+             return np.array([]), {}
+             
         peaks, properties = scipy.signal.find_peaks(data, height=height, distance=distance)
         return peaks, properties

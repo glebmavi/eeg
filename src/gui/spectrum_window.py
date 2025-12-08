@@ -10,6 +10,7 @@ class SpectrumWindow(QDialog):
         self.resize(800, 600)
         
         layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
         self.setLayout(layout)
         
         self.plot_widget = pg.PlotWidget()

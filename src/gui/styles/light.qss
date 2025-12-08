@@ -45,6 +45,18 @@ QCheckBox {
     color: #333333;
 }
 
+QCheckBox::indicator {
+    color: #333333;
+    border-radius: 4px;
+    border-style: solid;
+    border-width: 1px;
+    background: none;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #5a5a5a;
+}
+
 QLineEdit, QSpinBox, QDoubleSpinBox {
     background-color: #ffffff;
     border: 1px solid #cccccc;

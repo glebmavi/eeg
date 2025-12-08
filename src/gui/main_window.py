@@ -109,8 +109,12 @@ class MainWindow(QMainWindow):
     def split_view(self, view_widget, orientation):
         """
         Splits the given view_widget in the specified orientation.
-        orientation: Qt.Orientation.Horizontal or Qt.Orientation.Vertical
+        Strictly limits to 4 views max, and tries to enforce 2x2 grid-like structure limit.
         """
+        if len(self.views) >= 4:
+            # Enforce max 4 views total (User request: 2 Vert, 2 Horiz max usually implies 2x2 grid)
+            return
+
         # Find parent splitter
         parent = view_widget.parent()
         if not isinstance(parent, QSplitter):
@@ -120,7 +124,15 @@ class MainWindow(QMainWindow):
         index = parent_splitter.indexOf(view_widget)
         sizes = parent_splitter.sizes()
         current_size = sizes[index]
+        
+        # Logic to flatten structure if possible, or create deep structure only up to limit
+        # For simplicity and robustness given strict 4-view limit:
+        # Just create new splitter.
+        
         new_splitter = QSplitter(orientation)
+        new_splitter.setHandleWidth(4) # Make handle visible
+        # Quick style for handle (better in QSS, but code works too)
+        new_splitter.setStyleSheet("QSplitter::handle { background-color: #555; }")
         
         # Add new splitter to parent
         parent_splitter.insertWidget(index, new_splitter)
@@ -138,14 +150,50 @@ class MainWindow(QMainWindow):
         if len(self.views) <= 1:
             return # Don't close the last one
             
+        parent = view_widget.parent()
         view_widget.setParent(None)
         view_widget.deleteLater()
         if view_widget in self.views:
             self.views.remove(view_widget)
             
+        # Clean up empty splitters
+        if isinstance(parent, QSplitter):
+            self.cleanup_splitter(parent)
+            
         # If we closed the active view, select another
         if self.views:
             self.set_active_view(len(self.views) - 1)
+
+    def cleanup_splitter(self, splitter):
+        # Don't delete root splitter
+        if splitter == self.root_splitter:
+            return
+            
+        count = splitter.count()
+        if count == 0:
+            # Remove this splitter from its parent
+            parent = splitter.parent()
+            splitter.setParent(None)
+            splitter.deleteLater()
+            if isinstance(parent, QSplitter):
+                self.cleanup_splitter(parent)
+        elif count == 1:
+            # If only 1 child, move it up to parent
+            child = splitter.widget(0)
+            parent = splitter.parent()
+            
+            if isinstance(parent, QSplitter):
+                index = parent.indexOf(splitter)
+                parent.insertWidget(index, child)
+                # Now remove the redundant splitter
+                splitter.setParent(None)
+                splitter.deleteLater()
+                # Recurse check
+                # self.cleanup_splitter(parent) # Parent count didn't change (1 replaced by 1), but maybe beneficial?
+            else:
+                 # Parent is not splitter (maybe we are at root but not root_splitter check failed?)
+                 # If parent is None or Widget, we can't really "replace".
+                 pass
 
     def apply_filter_to_active_view(self, filter_params):
         """
@@ -167,6 +215,7 @@ class MainWindow(QMainWindow):
             sfreq = 250.0
             time_col = None
             unit_scale = 1.0
+            description = None
             
             # If CSV, use Import Dialog
             if file_path.lower().endswith('.csv'):
@@ -175,7 +224,7 @@ class MainWindow(QMainWindow):
                 if dlg.exec() == QDialog.DialogCode.Accepted:
                     time_col, unit_str = dlg.get_settings()
                     
-                    description = None
+                    
                     
                     # Logic for unit scale:
                     # Input "Volts" -> MNE wants Volts -> scale = 1.0

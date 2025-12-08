@@ -1,0 +1,13 @@
+QSplitter::handle {
+    background-color: #444444;
+    height: 4px; /* For vertical */
+    width: 4px; /* For horizontal */
+}
+
+QSplitter::handle:hover {
+    background-color: #0078d7;
+}
+
+QSplitter::handle:pressed {
+    background-color: #005a9e;
+}
