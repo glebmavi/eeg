@@ -44,7 +44,21 @@ class DataManager:
         """Register a callback to be called when signal list changes."""
         self.listeners.append(callback)
 
+    def get_all_channels(self) -> list[tuple[str, int, str]]:
+        """
+        Returns flattened list of all available channels.
+        Format: [(filename, channel_index, channel_name), ...]
+        """
+        channels = []
+        for name, raw in self.signals.items():
+            if raw.ch_names:
+                for i, ch_name in enumerate(raw.ch_names):
+                    channels.append((name, i, ch_name))
+        return channels
+
     def notify_listeners(self):
-        names = self.get_signal_names()
+        # Notify listeners - they should pull what they need
+        # We pass self to be flexible or just nothing
+        # Updated to just call them
         for callback in self.listeners:
-            callback(names)
+            callback()

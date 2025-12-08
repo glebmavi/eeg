@@ -44,24 +44,30 @@ class ControlPanel(QWidget):
         filter_layout = QFormLayout()
         
         self.notch_cb = QCheckBox("Notch Filter (50 Hz)")
+        self.notch_cb.toggled.connect(self.emit_filter_settings)
+        
         self.detrend_cb = QCheckBox("Detrend (Linear)")
+        self.detrend_cb.toggled.connect(self.emit_filter_settings)
         
         self.l_freq_spin = QDoubleSpinBox()
         self.l_freq_spin.setRange(0.1, 100.0)
         self.l_freq_spin.setValue(1.0)
+        self.l_freq_spin.valueChanged.connect(self.emit_filter_settings)
         
         self.h_freq_spin = QDoubleSpinBox()
         self.h_freq_spin.setRange(0.5, 200.0)
         self.h_freq_spin.setValue(40.0)
+        self.h_freq_spin.valueChanged.connect(self.emit_filter_settings)
         
         filter_layout.addRow(self.notch_cb)
         filter_layout.addRow(self.detrend_cb)
         filter_layout.addRow("Low Cut (Hz):", self.l_freq_spin)
         filter_layout.addRow("High Cut (Hz):", self.h_freq_spin)
         
-        self.apply_btn = QPushButton("Apply Filters to Active View")
-        self.apply_btn.clicked.connect(self.on_apply)
-        filter_layout.addRow(self.apply_btn)
+        # apply_btn removed for reactive UI
+        # self.apply_btn = QPushButton("Apply Filters to Active View")
+        # self.apply_btn.clicked.connect(self.on_apply)
+        # filter_layout.addRow(self.apply_btn)
         
         filter_group.setLayout(filter_layout)
         layout.addWidget(filter_group)
@@ -115,7 +121,7 @@ class ControlPanel(QWidget):
         
         layout.addStretch()
 
-    def on_apply(self):
+    def emit_filter_settings(self):
         params = {
             "notch": self.notch_cb.isChecked(),
             "detrend": self.detrend_cb.isChecked(),
@@ -123,3 +129,6 @@ class ControlPanel(QWidget):
             "h_freq": self.h_freq_spin.value()
         }
         self.filter_applied.emit(params)
+    
+    # Alias for legacy or just to keep logic
+    on_apply = emit_filter_settings
