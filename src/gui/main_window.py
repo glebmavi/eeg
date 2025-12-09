@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
         
-        # Left Side: Visualization Area (Dynamic Splitter)
+        # Left Side: Visualization Area
         self.root_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(self.root_splitter, stretch=3)
 
@@ -28,13 +28,12 @@ class MainWindow(QMainWindow):
         self.control_panel = ControlPanel()
         main_layout.addWidget(self.control_panel, stretch=1)
         
-        # Connect signals
+        # Signals
         self.control_panel.filter_applied.connect(self.apply_filter_to_active_view)
         self.control_panel.load_clicked.connect(self.load_data_file)
         self.control_panel.theme_toggled.connect(self.toggle_theme)
         self.control_panel.validation_clicked.connect(self.open_validation_dialog)
         
-        # Analysis signals
         self.control_panel.delta_toggled.connect(lambda c: self.toggle_analysis('delta', c))
         self.control_panel.theta_toggled.connect(lambda c: self.toggle_analysis('theta', c))
         self.control_panel.alpha_toggled.connect(lambda c: self.toggle_analysis('alpha', c))
@@ -44,9 +43,10 @@ class MainWindow(QMainWindow):
 
         self.views = []
         self._init_views()
+        self.active_view_index = None
 
     def toggle_analysis(self, feature, enabled):
-        if self.active_view_index is not None:
+        if self.active_view_index is not None and self.active_view_index < len(self.views):
             view = self.views[self.active_view_index]
             if feature == 'peaks':
                 view.toggle_peaks(enabled)
@@ -57,8 +57,7 @@ class MainWindow(QMainWindow):
         data = None
         sfreq = 250.0
         
-        # Try to use active view data
-        if self.active_view_index is not None:
+        if self.active_view_index is not None and self.active_view_index < len(self.views):
              view = self.views[self.active_view_index]
              if view.processed_data is not None:
                  data = view.processed_data.get_data()
@@ -70,8 +69,6 @@ class MainWindow(QMainWindow):
     def _init_views(self):
         """Initialize with a single view."""
         self.create_view(self.root_splitter)
-        
-        # Set first one active
         if self.views:
             self.set_active_view(0)
 
@@ -81,12 +78,10 @@ class MainWindow(QMainWindow):
         parent_splitter.addWidget(plot)
         self.views.append(plot)
         
-        # Connect signals
         plot.clicked.connect(self.set_active_view_by_widget)
         plot.split_requested.connect(self.split_view)
         plot.close_requested.connect(self.close_view)
         
-        # Apply current theme
         is_dark = self.control_panel.theme_cb.isChecked()
         plot.apply_theme(is_dark)
         
@@ -107,48 +102,30 @@ class MainWindow(QMainWindow):
                 self.active_view_index = i
 
     def split_view(self, view_widget, orientation):
-        """
-        Splits the given view_widget in the specified orientation.
-        Strictly limits to 4 views max, and tries to enforce 2x2 grid-like structure limit.
-        """
+        """Splits the view_widget, enforcing max 4 views."""
         if len(self.views) >= 4:
-            # Enforce max 4 views total (User request: 2 Vert, 2 Horiz max usually implies 2x2 grid)
             return
 
-        # Find parent splitter
-        parent = view_widget.parent()
-        if not isinstance(parent, QSplitter):
+        parent_splitter = view_widget.parent()
+        if not isinstance(parent_splitter, QSplitter):
             return
 
-        parent_splitter = parent
         index = parent_splitter.indexOf(view_widget)
-        sizes = parent_splitter.sizes()
-        current_size = sizes[index]
-        
-        # Logic to flatten structure if possible, or create deep structure only up to limit
-        # For simplicity and robustness given strict 4-view limit:
-        # Just create new splitter.
+        current_size = parent_splitter.sizes()[index]
         
         new_splitter = QSplitter(orientation)
-        new_splitter.setHandleWidth(4) # Make handle visible
-        # Quick style for handle (better in QSS, but code works too)
+        new_splitter.setHandleWidth(4)
         new_splitter.setStyleSheet("QSplitter::handle { background-color: #555; }")
         
-        # Add new splitter to parent
         parent_splitter.insertWidget(index, new_splitter)
-        
-        # Move current view to new splitter
         new_splitter.addWidget(view_widget)
         
-        # Create new view
         self.create_view(new_splitter)
-        
-        # Restore sizes roughly (distribute space)
         new_splitter.setSizes([current_size // 2, current_size // 2])
         
     def close_view(self, view_widget):
         if len(self.views) <= 1:
-            return # Don't close the last one
+            return 
             
         parent = view_widget.parent()
         view_widget.setParent(None)
@@ -156,50 +133,36 @@ class MainWindow(QMainWindow):
         if view_widget in self.views:
             self.views.remove(view_widget)
             
-        # Clean up empty splitters
         if isinstance(parent, QSplitter):
             self.cleanup_splitter(parent)
             
-        # If we closed the active view, select another
         if self.views:
             self.set_active_view(len(self.views) - 1)
 
     def cleanup_splitter(self, splitter):
-        # Don't delete root splitter
         if splitter == self.root_splitter:
             return
             
         count = splitter.count()
         if count == 0:
-            # Remove this splitter from its parent
             parent = splitter.parent()
             splitter.setParent(None)
             splitter.deleteLater()
             if isinstance(parent, QSplitter):
                 self.cleanup_splitter(parent)
         elif count == 1:
-            # If only 1 child, move it up to parent
+            # Move single child up to parent, replacing this splitter
             child = splitter.widget(0)
             parent = splitter.parent()
             
             if isinstance(parent, QSplitter):
                 index = parent.indexOf(splitter)
                 parent.insertWidget(index, child)
-                # Now remove the redundant splitter
                 splitter.setParent(None)
                 splitter.deleteLater()
-                # Recurse check
-                # self.cleanup_splitter(parent) # Parent count didn't change (1 replaced by 1), but maybe beneficial?
-            else:
-                 # Parent is not splitter (maybe we are at root but not root_splitter check failed?)
-                 # If parent is None or Widget, we can't really "replace".
-                 pass
 
     def apply_filter_to_active_view(self, filter_params):
-        """
-        Slot to handle filter application.
-        """
-        if self.active_view_index is not None:
+        if self.active_view_index is not None and self.active_view_index < len(self.views):
              view = self.views[self.active_view_index]
              view.apply_processing(filter_params)
 
@@ -212,78 +175,62 @@ class MainWindow(QMainWindow):
             return
             
         try:
-            sfreq = 250.0
-            time_col = None
-            unit_scale = 1.0
-            description = None
-            
-            # If CSV, use Import Dialog
-            if file_path.lower().endswith('.csv'):
-                # First ask for Import Config
-                dlg = ImportDialog(file_path, self)
-                if dlg.exec() == QDialog.DialogCode.Accepted:
-                    time_col, unit_str = dlg.get_settings()
-                    
-                    
-                    
-                    # Logic for unit scale:
-                    # Input "Volts" -> MNE wants Volts -> scale = 1.0
-                    # Input "uV" -> MNE wants Volts -> scale = 1e-6
-                    # Input "Raw" -> MNE wants Volts -> scale = 1.0 (interpret as Volts for storage simplicity)
-                    
-                    if unit_str == "Microvolts (uV)":
-                        unit_scale = 1e-6
-                    elif unit_str == "Raw/ADC":
-                        unit_scale = 1.0
-                        description = "Raw/ADC" # Flag for PlotWidget to not scale
-                    else:
-                        unit_scale = 1.0
-                        
-                    # Also ask for Frequency
-                    val, ok = QInputDialog.getDouble(self, "Sampling Frequency", 
-                                                    "Enter sampling frequency (Hz):", 250.0, 0.1, 10000.0)
-                    if ok:
-                        sfreq = val
-                    else:
-                        return
-                        
-                else:
-                    return # Cancelled
+            sfreq, time_col, unit_scale, description = self._get_import_config(file_path)
+            if sfreq is None: # Cancelled
+                return
             
             raw = DataLoader.load_data(file_path, sfreq=sfreq, time_col=time_col, 
                                        unit_scale=unit_scale, description=description)
             
-            # Add to DataManager
             name = file_path.split("/")[-1]
             manager = DataManager()
             final_name = manager.add_signal(name, raw)
             
-            if self.active_view_index is not None and len(self.views) > self.active_view_index:
-                view = self.views[self.active_view_index]
-                # If view is empty (raw_data is None), auto-load
-                if view.raw_data is None:
-                    # We need to trigger the combo box update in the view since DataManager updated
-                    # But the view is a listener, so it might have already updated its list? 
-                    # Yes, DataManager notifies listeners. 
-                    # We Just need to select it.
-                    
-                    # Find the index of the new item in the combo
-                    # The combo format is "filename - channel"
-                    # We'll just select the first channel of the new file
-                    # Or simpler: just select index 1 (the first real item) if we want any data
-                    
-                    # Search for items starting with our file name
-                    combo = view.signal_combo
-                    for i in range(combo.count()):
-                        data = combo.itemData(i)
-                        if data and data[0] == name: # data is (fname, ch_idx)
-                            combo.setCurrentIndex(i)
-                            break 
+            self._select_loaded_signal(name)
                 
             QMessageBox.information(self, "Success", f"Loaded {final_name}")
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load data:\n{str(e)}")
+
+    def _get_import_config(self, file_path):
+        sfreq = 250.0
+        time_col = None
+        unit_scale = 1.0
+        description = None
+
+        if file_path.lower().endswith('.csv'):
+            dlg = ImportDialog(file_path, self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return None, None, None, None
+                
+            time_col, unit_str = dlg.get_settings()
+            
+            if unit_str == "Microvolts (uV)":
+                unit_scale = 1e-6
+            elif unit_str == "Raw/ADC":
+                unit_scale = 1.0
+                description = "Raw/ADC"
+
+            val, ok = QInputDialog.getDouble(self, "Sampling Frequency", 
+                                            "Enter sampling frequency (Hz):", 250.0, 0.1, 10000.0)
+            if not ok:
+                 return None, None, None, None
+            sfreq = val
+
+        return sfreq, time_col, unit_scale, description
+
+    def _select_loaded_signal(self, name_prefix):
+        """Helper to auto-select signal in active view."""
+        if self.active_view_index is not None and self.active_view_index < len(self.views):
+            view = self.views[self.active_view_index]
+            if view.raw_data is None:
+                combo = view.signal_combo
+                for i in range(combo.count()):
+                    data = combo.itemData(i)
+                    if data and data[0] == name_prefix:
+                        combo.setCurrentIndex(i)
+                        break
 
     def toggle_theme(self, is_dark):
         app = QApplication.instance()

@@ -8,6 +8,7 @@ import scipy.signal
 from src.core.data_manager import DataManager
 from src.gui.spectrum_window import SpectrumWindow
 from src.core.processor import SignalProcessor
+from src.models.types import RhythmBands
 
 class PlotWidget(QWidget):
     clicked = pyqtSignal()
@@ -43,7 +44,6 @@ class PlotWidget(QWidget):
         self.layout.addWidget(self.plot_item)
 
         # Signal Proxy for Hover
-        # We must keep a reference to the proxy to prevent garbage collection
         self.proxy = pg.SignalProxy(self.plot_item.scene().sigMouseMoved, rateLimit=60, slot=self.on_mouse_move)
 
         self.raw_data = None
@@ -51,18 +51,16 @@ class PlotWidget(QWidget):
         self.current_ch_index = 0
         self.is_active = False
         
-        # Analysis items
         self.main_curve = None
         self.rhythm_curves = {}
         self.peak_scatter = None
         
-        # DataManager connection
         self.data_manager = DataManager()
         self.data_manager.add_listener(self.update_signal_list)
         self.update_signal_list()
 
     def _get_scale_and_unit(self):
-        """Helper to determine display scaling and unit string based on data type."""
+        """Determine scaling and unit string."""
         if self.raw_data and self.raw_data.info.get('description') == "Raw/ADC":
             return 1.0, "ADC"
         return 1e6, "uV"  # Default MNE Volts -> Microvolts
@@ -73,8 +71,7 @@ class PlotWidget(QWidget):
         self.signal_combo.clear()
         self.signal_combo.addItem("Select Signal...", None)
         
-        channels = self.data_manager.get_all_channels()
-        for fname, ch_idx, ch_name in channels:
+        for fname, ch_idx, ch_name in self.data_manager.get_all_channels():
             display_name = f"{fname} - {ch_name}"
             self.signal_combo.addItem(display_name, (fname, ch_idx))
         
@@ -132,7 +129,6 @@ class PlotWidget(QWidget):
         self.current_ch_index = ch_index
         self.processed_data = raw.copy()
         
-        # Reset analysis
         self.rhythm_curves = {}
         if self.peak_scatter:
             self.plot_item.removeItem(self.peak_scatter)
@@ -175,25 +171,17 @@ class PlotWidget(QWidget):
             del self.rhythm_curves[rhythm_type]
             
         if not enabled:
-            # Revert label to base unit if no rhythms are left
             if not self.rhythm_curves:
                 _, unit = self._get_scale_and_unit()
                 self.plot_item.setLabel('left', f"Amplitude ({unit})")
             return
 
-        bands = {
-            'delta': (0.5, 4, 'c'),
-            'theta': (4, 8, 'm'),
-            'alpha': (8, 13, 'r'), 
-            'beta': (13, 30, 'g'),
-            'gamma': (30, 100, 'y') 
-        }
-        if rhythm_type not in bands: return
-        l_freq, h_freq, color = bands[rhythm_type]
+        band = RhythmBands.get_band(rhythm_type)
+        if not band: return
         
         rhythm_raw = self.processed_data.copy()
         try:
-            rhythm_raw.filter(l_freq, h_freq, verbose=False)
+            rhythm_raw.filter(band.low, band.high, verbose=False)
         except Exception as e:
             print(f"Filter error for {rhythm_type}: {e}")
             return
@@ -202,10 +190,9 @@ class PlotWidget(QWidget):
         data = rhythm_raw.get_data()[self.current_ch_index] * scale
         times = rhythm_raw.times
         
-        curve = self.plot_item.plot(times, data, pen=pg.mkPen(color, width=2))
+        curve = self.plot_item.plot(times, data, pen=pg.mkPen(band.color, width=2))
         self.rhythm_curves[rhythm_type] = curve
         
-        # Update Label to reflect we are showing a rhythm
         self.plot_item.setLabel('left', f"Amplitude ({unit})")
         self.plot_item.autoRange()
 
@@ -221,7 +208,7 @@ class PlotWidget(QWidget):
         
         if self.processed_data is None: return
 
-        # Clear rhythms as per requirement
+        # Clear active rhythms
         for r_type in list(self.rhythm_curves.keys()):
             self.plot_item.removeItem(self.rhythm_curves[r_type])
             del self.rhythm_curves[r_type]
@@ -234,7 +221,6 @@ class PlotWidget(QWidget):
         scale, unit = self._get_scale_and_unit()
         
         if unit == "ADC":
-            # Center ADC data for peak detection to work reliably on relative height
             data_scaled = data - np.mean(data)
         else:
             data_scaled = data * scale
@@ -255,28 +241,22 @@ class PlotWidget(QWidget):
         self.plot_item.autoRange()
 
     def on_mouse_move(self, evt):
-        pos = evt[0] # Scene coordinates
+        pos = evt[0] 
         if self.plot_item.sceneBoundingRect().contains(pos):
             mouse_point = self.plot_item.plotItem.vb.mapSceneToView(pos)
             x_val = mouse_point.x()
             y_val = mouse_point.y()
             
-            # Determine current unit
             _, unit = self._get_scale_and_unit()
 
             is_peak = False
             peak_val = 0.0
             
             if self.peak_scatter is not None:
-                # Map scene position to the ScatterPlotItem's coordinate system
-                # ScatterPlotItem usually resides in the ViewBox. 
-                # pointsAt checks pixel distance in local coords.
                 local_pos = self.peak_scatter.mapFromScene(pos)
                 points = self.peak_scatter.pointsAt(local_pos)
-                
                 if len(points) > 0:
                     is_peak = True
-                    # Access the data value of the point
                     peak_val = points[0].pos().y()
 
             view_pos = self.plot_item.mapFromScene(pos)
@@ -307,11 +287,9 @@ class PlotWidget(QWidget):
         
         if self.current_ch_index < len(data):
             valid_data = data[self.current_ch_index]
-            
             scale, unit = self._get_scale_and_unit()
             
             if unit == "ADC":
-                # Center raw data
                 valid_data = valid_data - np.mean(valid_data)
                 self.plot_item.setLabel('left', "Amplitude (ADC Centered)")
             else:
