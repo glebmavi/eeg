@@ -43,7 +43,8 @@ class PlotWidget(QWidget):
         self.layout.addWidget(self.plot_item)
 
         # Signal Proxy for Hover
-        self.proxy = pg.SignalProxy(self.plot_item.scene().sigMouseMoved, rateLimit=60, slot=self.on_mouse_move) # AttributeError: 'PlotWidget' object has no attribute 'on_mouse_move'
+        # We must keep a reference to the proxy to prevent garbage collection
+        self.proxy = pg.SignalProxy(self.plot_item.scene().sigMouseMoved, rateLimit=60, slot=self.on_mouse_move)
 
         self.raw_data = None
         self.processed_data = None
@@ -58,8 +59,13 @@ class PlotWidget(QWidget):
         # DataManager connection
         self.data_manager = DataManager()
         self.data_manager.add_listener(self.update_signal_list)
-        # Initial population
         self.update_signal_list()
+
+    def _get_scale_and_unit(self):
+        """Helper to determine display scaling and unit string based on data type."""
+        if self.raw_data and self.raw_data.info.get('description') == "Raw/ADC":
+            return 1.0, "ADC"
+        return 1e6, "uV"  # Default MNE Volts -> Microvolts
 
     def update_signal_list(self):
         current_text = self.signal_combo.currentText()
@@ -68,14 +74,10 @@ class PlotWidget(QWidget):
         self.signal_combo.addItem("Select Signal...", None)
         
         channels = self.data_manager.get_all_channels()
-        # channels is list of (filename, ch_idx, ch_name)
-        
         for fname, ch_idx, ch_name in channels:
             display_name = f"{fname} - {ch_name}"
-            # Store tuple (fname, ch_idx) as user data
             self.signal_combo.addItem(display_name, (fname, ch_idx))
         
-        # Restore selection if possible
         index = self.signal_combo.findText(current_text)
         if index >= 0:
             self.signal_combo.setCurrentIndex(index)
@@ -83,13 +85,11 @@ class PlotWidget(QWidget):
 
     def on_signal_selected(self, index):
         if index <= 0: return 
-        
         data = self.signal_combo.currentData()
         if data:
             fname, ch_idx = data
             raw = self.data_manager.get_signal(fname)
             if raw:
-                # Load the raw object but set the specific channel index
                 self.load_data(raw, fname, ch_idx)
 
     def mousePressEvent(self, event):
@@ -98,33 +98,22 @@ class PlotWidget(QWidget):
         super().mousePressEvent(event)
 
     def contextMenuEvent(self, event):
-        # Strict logic: Only show window menu if click is in top_bar
         child = self.childAt(event.pos())
-        
-        # Check if click is on top_bar or its children
         if child and (child == self.top_bar or self.top_bar.isAncestorOf(child)):
              self.show_window_menu(event.globalPos())
-        else:
-            # Let standard logic apply (PyQtGraph handles its own)
-            pass
-            
+
     def show_window_menu(self, pos):
         menu = QMenu(self)
-        
-        # Analysis Group
         if self.processed_data is not None:
              action_spectrum = QAction("Show Frequency Spectrum (FFT)", self)
              action_spectrum.triggered.connect(self.show_spectrum)
              menu.addAction(action_spectrum)
              menu.addSeparator()
         
-        # View Management Group
         split_h = QAction("Split Horizontal", self)
         split_h.triggered.connect(lambda: self.split_requested.emit(self, Qt.Orientation.Horizontal))
-        
         split_v = QAction("Split Vertical", self)
         split_v.triggered.connect(lambda: self.split_requested.emit(self, Qt.Orientation.Vertical))
-        
         close_view = QAction("Close View", self)
         close_view.triggered.connect(lambda: self.close_requested.emit(self))
         
@@ -132,80 +121,53 @@ class PlotWidget(QWidget):
         menu.addAction(split_v)
         menu.addSeparator()
         menu.addAction(close_view)
-        
         menu.exec(pos)
 
     def set_active(self, active: bool):
         self.is_active = active
-        if active:
-            # We used blue to highlight active view
-            self.setStyleSheet("border: 2px solid blue;")
-        else:
-            self.setStyleSheet("border: 1px solid gray;")
+        self.setStyleSheet("border: 2px solid blue;" if active else "border: 1px solid gray;")
 
     def load_data(self, raw: mne.io.BaseRaw, filename: str, ch_index: int = 0):
         self.raw_data = raw
         self.current_ch_index = ch_index
-        # We start with a copy of the raw data. 
-        # Note: If raw is very large, this copy might be expensive. 
-        # But MNE usually preloads if we asked it to.
         self.processed_data = raw.copy()
         
-        # Clear previous analysis
+        # Reset analysis
         self.rhythm_curves = {}
         if self.peak_scatter:
             self.plot_item.removeItem(self.peak_scatter)
             self.peak_scatter = None
             
         ch_name = raw.ch_names[ch_index] if raw.ch_names else f"Ch{ch_index}"
-        
-        fname = filename
-            
-        self.label.setText(f"View {self.index + 1}: {fname} - {ch_name}")
+        self.label.setText(f"View {self.index + 1}: {filename} - {ch_name}")
         self.update_plot()
 
     def apply_processing(self, params):
-        if self.raw_data is None:
-            return
-            
-        # Start from clean copy to ensure non-destructive filtering
-        # Reactive filtering needs this base state
+        if self.raw_data is None: return
         temp = self.raw_data.copy()
-        
         if params.get('detrend'):
             temp = SignalProcessor.detrend_signal(temp)
-            
         if params.get('notch'):
             temp = SignalProcessor.apply_notch(temp, np.array([50.0]))
-            
         l_freq = params.get('l_freq')
         h_freq = params.get('h_freq')
         if l_freq and h_freq:
             temp = SignalProcessor.apply_filter(temp, l_freq, h_freq)
-            
         self.processed_data = temp
         self.update_plot()
-        # Auto-zoom after processing
         self.plot_item.autoRange()
 
     def show_spectrum(self):
-        if self.processed_data is None: 
-            return
-        
+        if self.processed_data is None: return
         try:
-             # Get specific channel data
             data = self.processed_data.get_data()[self.current_ch_index]
             sfreq = self.processed_data.info['sfreq']
-            
             self.spectrum_win = SpectrumWindow(data, sfreq, self)
             self.spectrum_win.show()
         except Exception as e:
             print(f"Error showing spectrum: {e}")
 
     def toggle_rhythm(self, rhythm_type: str, enabled: bool):
-        """
-        rhythm_type: 'alpha', 'beta', 'gamma', 'theta', 'delta'
-        """
         if self.processed_data is None: return
 
         if rhythm_type in self.rhythm_curves:
@@ -213,13 +175,12 @@ class PlotWidget(QWidget):
             del self.rhythm_curves[rhythm_type]
             
         if not enabled:
-            # If disabling a rhythm, we may want to auto-zoom to remaining content, 
-            # but usually auto-zoom is strictly requested on "apply" actions. 
-            # The user asked: "Each new checkbox apply... should change zoom". 
-            self.plot_item.autoRange()
+            # Revert label to base unit if no rhythms are left
+            if not self.rhythm_curves:
+                _, unit = self._get_scale_and_unit()
+                self.plot_item.setLabel('left', f"Amplitude ({unit})")
             return
 
-        # Calculate Rhythm
         bands = {
             'delta': (0.5, 4, 'c'),
             'theta': (4, 8, 'm'),
@@ -228,10 +189,8 @@ class PlotWidget(QWidget):
             'gamma': (30, 100, 'y') 
         }
         if rhythm_type not in bands: return
-        
         l_freq, h_freq, color = bands[rhythm_type]
         
-        # Filter a copy
         rhythm_raw = self.processed_data.copy()
         try:
             rhythm_raw.filter(l_freq, h_freq, verbose=False)
@@ -239,13 +198,15 @@ class PlotWidget(QWidget):
             print(f"Filter error for {rhythm_type}: {e}")
             return
 
-        data = rhythm_raw.get_data()[self.current_ch_index] * 1e6
+        scale, unit = self._get_scale_and_unit()
+        data = rhythm_raw.get_data()[self.current_ch_index] * scale
         times = rhythm_raw.times
         
-        # Plot on top
         curve = self.plot_item.plot(times, data, pen=pg.mkPen(color, width=2))
         self.rhythm_curves[rhythm_type] = curve
         
+        # Update Label to reflect we are showing a rhythm
+        self.plot_item.setLabel('left', f"Amplitude ({unit})")
         self.plot_item.autoRange()
 
     def toggle_peaks(self, enabled: bool):
@@ -258,123 +219,106 @@ class PlotWidget(QWidget):
                  self.plot_item.autoRange()
             return
         
-        if self.processed_data is None:
-            return
+        if self.processed_data is None: return
 
-        # Requirement: "if peaks are selected, then no brain waves should be shown"
-        # We clear any existing rhythms
-        keys = list(self.rhythm_curves.keys())
-        for r_type in keys:
+        # Clear rhythms as per requirement
+        for r_type in list(self.rhythm_curves.keys()):
             self.plot_item.removeItem(self.rhythm_curves[r_type])
             del self.rhythm_curves[r_type]
             
-        # Requirement: "...except the raw data line, and add it, if it's not shown"
         if self.main_curve is None:
-            self.update_plot() # This re-creates main_curve and ensures it's shown
+            self.update_plot()
         
-        # Ensure we use the exact same logic as update_plot for data consistency
         data = self.processed_data.get_data()[self.current_ch_index]
         times = self.processed_data.times
+        scale, unit = self._get_scale_and_unit()
         
-        # Determine Scaling used in update_plot to match visual
-        scaling_factor = 1e6 # Default uV
-        if self.raw_data and self.raw_data.info.get('description') == "Raw/ADC":
-            # Raw/ADC case: No scaling, just centering
-            # Replicate update_plot logic strictly
-            data = data - np.mean(data)
-            scaling_factor = 1.0 # It's already raw units
+        if unit == "ADC":
+            # Center ADC data for peak detection to work reliably on relative height
+            data_scaled = data - np.mean(data)
         else:
-            data = data * scaling_factor
+            data_scaled = data * scale
             
-        # Heuristic height: > 2 std dev
-        height = np.std(data) * 2
-        peaks, _ = SignalProcessor.detect_peaks(data, height=height, distance=50)
+        height = np.std(data_scaled) * 2
+        peaks, _ = SignalProcessor.detect_peaks(data_scaled, height=height, distance=50)
         
         if len(peaks) > 0:
-            # Visual points MUST be on top of the line
-            self.peak_scatter = pg.ScatterPlotItem(x=times[peaks], y=data[peaks], pen='r', brush='r', size=10, hoverable=True)
-            # self.peak_scatter.setTip(None)  <-- Removed invalid call
+            self.peak_scatter = pg.ScatterPlotItem(
+                x=times[peaks], 
+                y=data_scaled[peaks], 
+                pen='r', brush='r', size=12, 
+                hoverable=True, 
+                hoverPen='w', hoverBrush='b'
+            )
             self.plot_item.addItem(self.peak_scatter)
             
         self.plot_item.autoRange()
 
     def on_mouse_move(self, evt):
-        pos = evt[0]  # using signal proxy turns original arguments into a tuple
+        pos = evt[0] # Scene coordinates
         if self.plot_item.sceneBoundingRect().contains(pos):
             mouse_point = self.plot_item.plotItem.vb.mapSceneToView(pos)
             x_val = mouse_point.x()
             y_val = mouse_point.y()
             
-            # Use current unit or default
-            unit = getattr(self, 'current_unit', 'uV')
+            # Determine current unit
+            _, unit = self._get_scale_and_unit()
 
-            # Check for Peaks Hover
             is_peak = False
             peak_val = 0.0
             
             if self.peak_scatter is not None:
-                # pointsAt uses scene pos
-                points = self.peak_scatter.pointsAt(pos)
+                # Map scene position to the ScatterPlotItem's coordinate system
+                # ScatterPlotItem usually resides in the ViewBox. 
+                # pointsAt checks pixel distance in local coords.
+                local_pos = self.peak_scatter.mapFromScene(pos)
+                points = self.peak_scatter.pointsAt(local_pos)
+                
                 if len(points) > 0:
                     is_peak = True
-                    # Get the point's data
-                    # point.pos().y() gives the value
+                    # Access the data value of the point
                     peak_val = points[0].pos().y()
 
-            # Tooltip Text
             view_pos = self.plot_item.mapFromScene(pos)
             global_pos = self.plot_item.mapToGlobal(view_pos)
             
             if is_peak:
-                # Show Peak Value
                 QToolTip.showText(global_pos, f"PEAK DETECTED\nTime: {x_val:.3f} s\nValue: {peak_val:.2f} {unit}", self.plot_item)
             else:
-                # Show Signal Value
                 QToolTip.showText(global_pos, f"Time: {x_val:.3f} s\nAmp: {y_val:.2f} {unit}", self.plot_item)
 
     def apply_theme(self, is_dark: bool):
-        self.is_dark = is_dark # Store for update_plot usage
+        self.is_dark = is_dark
         if is_dark:
             self.plot_item.setBackground('#2b2b2b')
         else:
             self.plot_item.setBackground('w')
-        # Re-plot to update pen colors if needed
         self.update_plot()
 
     def update_plot(self):
-        if self.processed_data is None:
-            return
-            
+        if self.processed_data is None: return
+        
         self.plot_item.clear()
         self.rhythm_curves = {}
         self.peak_scatter = None
         
-        # Get all data (n_channels, n_times)
         data = self.processed_data.get_data()
         times = self.processed_data.times
         
-        # Pick just the current channel
         if self.current_ch_index < len(data):
             valid_data = data[self.current_ch_index]
             
-            # Check scaling
-            if self.raw_data and self.raw_data.info.get('description') == "Raw/ADC":
-                # Raw integer data: Center it to 0 so it's visible along with uV data
+            scale, unit = self._get_scale_and_unit()
+            
+            if unit == "ADC":
+                # Center raw data
                 valid_data = valid_data - np.mean(valid_data)
-                self.current_unit = "ADC"
                 self.plot_item.setLabel('left', "Amplitude (ADC Centered)")
             else:
-                # Standard MNE Volts -> uV
-                valid_data = valid_data * 1e6
-                self.current_unit = "uV"
-                self.plot_item.setLabel('left', "Amplitude (uV)")
+                valid_data = valid_data * scale
+                self.plot_item.setLabel('left', f"Amplitude ({unit})")
             
-            # Choose Pen Color based on theme
-            if hasattr(self, 'is_dark') and self.is_dark:
-                 pen_color = '#dddddd'
-            else:
-                 pen_color = '#050505'
-            
+            pen_color = '#dddddd' if hasattr(self, 'is_dark') and self.is_dark else '#050505'
             self.main_curve = self.plot_item.plot(times, valid_data, pen=pen_color)
         else:
             self.label.setText("Error: Channel Index Out of Bounds")
