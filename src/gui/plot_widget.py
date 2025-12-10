@@ -46,6 +46,7 @@ class PlotWidget(QWidget):
         self.plot_item = pg.PlotWidget()
         self.plot_item.setBackground('w')
         self.plot_item.showGrid(x=True, y=True)
+        self.plot_item.setLabel('bottom', "Time (s)")
         self.layout.addWidget(self.plot_item)
 
         # Signal Proxy for Hover

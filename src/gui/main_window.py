@@ -25,6 +25,11 @@ class MainWindow(QMainWindow):
         self.toolbar = QToolBar("Main Toolbar")
         self.addToolBar(self.toolbar)
 
+        # Load Data Action
+        self.action_load = QAction("Load Data", self)
+        self.action_load.triggered.connect(self.load_data_file)
+        self.toolbar.addAction(self.action_load)
+
         # Dark Mode Action
         self.action_theme = QAction("Dark Mode", self)
         self.action_theme.setCheckable(True)
@@ -50,8 +55,7 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         cp = self.control_panel
         cp.filter_applied.connect(self.apply_filter_to_active_view)
-        cp.load_clicked.connect(self.load_data_file)
-
+        
         # Analysis
         cp.delta_toggled.connect(lambda c: self.toggle_analysis('delta', c))
         cp.theta_toggled.connect(lambda c: self.toggle_analysis('theta', c))

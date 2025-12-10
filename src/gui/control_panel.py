@@ -9,8 +9,7 @@ from src.models.types import FilterState, AnalysisState, RhythmBands
 class ControlPanel(QWidget):
     # Filter & View Signals
     filter_applied = pyqtSignal(dict)
-    load_clicked = pyqtSignal()
-
+    
     # Analysis Toggles
     alpha_toggled = pyqtSignal(bool)
     beta_toggled = pyqtSignal(bool)
@@ -39,15 +38,6 @@ class ControlPanel(QWidget):
 
         # --- Advanced Processing (Artifacts & Features) ---
         self._init_advanced_controls()
-
-        # --- Data Controls ---
-        data_group = QGroupBox("Data Management")
-        data_layout = QVBoxLayout()
-        self.load_btn = QPushButton("Load Data File...")
-        self.load_btn.clicked.connect(self.load_clicked.emit)
-        data_layout.addWidget(self.load_btn)
-        data_group.setLayout(data_layout)
-        self.layout.addWidget(data_group)
 
         self.layout.addStretch()
 
