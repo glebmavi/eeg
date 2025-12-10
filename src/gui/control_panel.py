@@ -4,14 +4,12 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QCheckBox,
                              QLabel, QDoubleSpinBox, QPushButton, QFormLayout, QHBoxLayout)
 from PyQt6.QtCore import pyqtSignal, QTimer
 from src.models.types import FilterState, AnalysisState, RhythmBands
-from src.core.validator import Validator
 
 
 class ControlPanel(QWidget):
     # Filter & View Signals
     filter_applied = pyqtSignal(dict)
     load_clicked = pyqtSignal()
-    theme_toggled = pyqtSignal(bool)
 
     # Analysis Toggles
     alpha_toggled = pyqtSignal(bool)
@@ -65,15 +63,9 @@ class ControlPanel(QWidget):
 
         self.lbl_memory = QLabel("Memory: Calculating...")
         self.lbl_uptime = QLabel("Uptime: 0s")
-        self.lbl_mse = QLabel("Filter Accuracy (MSE): N/A")
-
-        self.btn_benchmark = QPushButton("Run Filter Benchmark")
-        self.btn_benchmark.clicked.connect(self.run_benchmark)
 
         monitor_layout.addRow(self.lbl_memory)
         monitor_layout.addRow(self.lbl_uptime)
-        monitor_layout.addRow(self.lbl_mse)
-        monitor_layout.addRow(self.btn_benchmark)
 
         monitor_group.setLayout(monitor_layout)
         self.layout.addWidget(monitor_group)
@@ -145,12 +137,6 @@ class ControlPanel(QWidget):
         adv_group = QGroupBox("Advanced Analysis & Artifacts")
         adv_layout = QVBoxLayout()
 
-        # System Theme
-        self.theme_cb = QCheckBox("Dark Mode")
-        self.theme_cb.setChecked(True)
-        self.theme_cb.toggled.connect(self.theme_toggled.emit)
-        adv_layout.addWidget(self.theme_cb)
-
         # Artifact Removal
         self.btn_ica = QPushButton("Auto-Remove Artifacts (ICA)")
         self.btn_ica.setToolTip("Uses Independent Component Analysis to remove the first component (often blinks).")
@@ -179,30 +165,6 @@ class ControlPanel(QWidget):
         minutes, seconds = divmod(remainder, 60)
         self.lbl_uptime.setText(f"Uptime: {hours:02}:{minutes:02}:{seconds:02}")
 
-    def run_benchmark(self):
-        """Runs the validator logic in place."""
-        self.btn_benchmark.setText("Running...")
-        self.btn_benchmark.setEnabled(False)
-        self.repaint()  # Force update
-
-        try:
-            # Run validation on synthetic data
-            # 10 seconds of 250Hz noise + sine
-            import numpy as np
-            t = np.linspace(0, 10, 2500)
-            data = np.sin(2 * np.pi * 10 * t) + np.random.normal(0, 0.5, len(t))
-
-            # Compare Filters
-            res = Validator.compare_filters(data, 250.0, 1.0, 40.0)
-            mse = res['mse']
-
-            self.lbl_mse.setText(f"Filter Accuracy (MSE): {mse:.2e}")
-        except Exception as e:
-            self.lbl_mse.setText("Error")
-            print(e)
-        finally:
-            self.btn_benchmark.setText("Run Filter Benchmark")
-            self.btn_benchmark.setEnabled(True)
 
     def update_ui_state(self, filter_state: FilterState, analysis_state: AnalysisState):
         """

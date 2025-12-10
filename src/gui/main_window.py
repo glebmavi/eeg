@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QMessageBox,
-                             QSplitter, QFileDialog, QInputDialog, QDialog, QApplication)
+                             QSplitter, QFileDialog, QInputDialog, QDialog, QApplication, QToolBar)
+from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt
 from src.gui.control_panel import ControlPanel
 from src.gui.plot_widget import PlotWidget
@@ -20,6 +21,17 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
+        # Toolbar
+        self.toolbar = QToolBar("Main Toolbar")
+        self.addToolBar(self.toolbar)
+
+        # Dark Mode Action
+        self.action_theme = QAction("Dark Mode", self)
+        self.action_theme.setCheckable(True)
+        self.action_theme.setChecked(True)
+        self.action_theme.toggled.connect(self.toggle_theme)
+        self.toolbar.addAction(self.action_theme)
+
         # Visualization (Left)
         self.root_splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(self.root_splitter, stretch=3)
@@ -39,7 +51,6 @@ class MainWindow(QMainWindow):
         cp = self.control_panel
         cp.filter_applied.connect(self.apply_filter_to_active_view)
         cp.load_clicked.connect(self.load_data_file)
-        cp.theme_toggled.connect(self.toggle_theme)
 
         # Analysis
         cp.delta_toggled.connect(lambda c: self.toggle_analysis('delta', c))
@@ -68,7 +79,7 @@ class MainWindow(QMainWindow):
         plot.split_requested.connect(self.split_view)
         plot.close_requested.connect(self.close_view)
 
-        is_dark = self.control_panel.theme_cb.isChecked()
+        is_dark = self.action_theme.isChecked()
         plot.apply_theme(is_dark)
 
         return plot
