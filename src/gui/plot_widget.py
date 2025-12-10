@@ -244,11 +244,6 @@ class PlotWidget(QWidget):
 
         if self.processed_data is None: return
 
-        # Clear active rhythms
-        for r_type in list(self.rhythm_curves.keys()):
-            self.plot_item.removeItem(self.rhythm_curves[r_type])
-            del self.rhythm_curves[r_type]
-
         if self.main_curve is None:
             self.update_plot()
 
