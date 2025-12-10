@@ -1,54 +1,91 @@
+import time
+import psutil
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QCheckBox,
-                             QLabel, QDoubleSpinBox, QPushButton, QFormLayout)
-from PyQt6.QtCore import pyqtSignal
+                             QLabel, QDoubleSpinBox, QPushButton, QFormLayout, QHBoxLayout)
+from PyQt6.QtCore import pyqtSignal, QTimer
 from src.models.types import FilterState, AnalysisState
+from src.core.validator import Validator
 
 
 class ControlPanel(QWidget):
-    # Signal emitted when "Apply" is clicked
+    # Filter & View Signals
     filter_applied = pyqtSignal(dict)
-    # Signal emitted when "Load Data" is clicked
     load_clicked = pyqtSignal()
-    # Signal emitted when Theme is toggled (True=Dark, False=Light)
     theme_toggled = pyqtSignal(bool)
 
-    # Analysis Signals
+    # Analysis Toggles
     alpha_toggled = pyqtSignal(bool)
     beta_toggled = pyqtSignal(bool)
     gamma_toggled = pyqtSignal(bool)
     theta_toggled = pyqtSignal(bool)
     delta_toggled = pyqtSignal(bool)
-
     peaks_toggled = pyqtSignal(bool)
 
-    # Validation Signal
-    validation_clicked = pyqtSignal()
+    # Advanced Processing Signals
+    ica_requested = pyqtSignal()
+    features_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
 
-        # --- System Controls ---
-        sys_group = QGroupBox("System")
-        sys_layout = QFormLayout()
-
-        self.theme_cb = QCheckBox("Dark Theme")
-        self.theme_cb.setChecked(True)  # Default to dark
-        self.theme_cb.toggled.connect(self.theme_toggled.emit)
-
-        sys_layout.addRow(self.theme_cb)
-        sys_group.setLayout(sys_layout)
-        layout.addWidget(sys_group)
+        # --- System Monitor ---
+        self._init_system_monitor()
 
         # --- Filter Group ---
-        filter_group = QGroupBox("Signal Processing")
+        self._init_filter_controls()
+
+        # --- Analysis Group ---
+        self._init_analysis_controls()
+
+        # --- Advanced Processing (Artifacts & Features) ---
+        self._init_advanced_controls()
+
+        # --- Data Controls ---
+        data_group = QGroupBox("Data Management")
+        data_layout = QVBoxLayout()
+        self.load_btn = QPushButton("Load Data File...")
+        self.load_btn.clicked.connect(self.load_clicked.emit)
+        data_layout.addWidget(self.load_btn)
+        data_group.setLayout(data_layout)
+        self.layout.addWidget(data_group)
+
+        self.layout.addStretch()
+
+        # Timer for real-time stats
+        self.start_time = time.time()
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_system_stats)
+        self.timer.start(1000)  # Update every second
+
+    def _init_system_monitor(self):
+        monitor_group = QGroupBox("System Status")
+        monitor_layout = QFormLayout()
+
+        self.lbl_memory = QLabel("Memory: Calculating...")
+        self.lbl_uptime = QLabel("Uptime: 0s")
+        self.lbl_mse = QLabel("Filter Accuracy (MSE): N/A")
+
+        self.btn_benchmark = QPushButton("Run Filter Benchmark")
+        self.btn_benchmark.clicked.connect(self.run_benchmark)
+
+        monitor_layout.addRow(self.lbl_memory)
+        monitor_layout.addRow(self.lbl_uptime)
+        monitor_layout.addRow(self.lbl_mse)
+        monitor_layout.addRow(self.btn_benchmark)
+
+        monitor_group.setLayout(monitor_layout)
+        self.layout.addWidget(monitor_group)
+
+    def _init_filter_controls(self):
+        filter_group = QGroupBox("Signal Pre-processing")
         filter_layout = QFormLayout()
 
-        self.notch_cb = QCheckBox("Notch Filter (50 Hz)")
+        self.notch_cb = QCheckBox("Notch (50Hz - Line Noise)")
         self.notch_cb.toggled.connect(self.emit_filter_settings)
 
-        self.detrend_cb = QCheckBox("Detrend (Linear)")
+        self.detrend_cb = QCheckBox("Detrend (Remove Drift)")
         self.detrend_cb.toggled.connect(self.emit_filter_settings)
 
         self.l_freq_spin = QDoubleSpinBox()
@@ -67,28 +104,25 @@ class ControlPanel(QWidget):
         filter_layout.addRow("High Cut (Hz):", self.h_freq_spin)
 
         filter_group.setLayout(filter_layout)
-        layout.addWidget(filter_group)
+        self.layout.addWidget(filter_group)
 
-        # --- Analysis Group ---
-        analysis_group = QGroupBox("Interactive Analysis")
+    def _init_analysis_controls(self):
+        analysis_group = QGroupBox("Rhythm Visualization")
         analysis_layout = QVBoxLayout()
 
-        self.delta_cb = QCheckBox("Show Delta (0.5-4 Hz)")
+        # TODO: use models.types.py for power bands
+        self.delta_cb = QCheckBox("Delta (0.5-4 Hz)")
         self.delta_cb.toggled.connect(self.delta_toggled.emit)
-
-        self.theta_cb = QCheckBox("Show Theta (4-8 Hz)")
+        self.theta_cb = QCheckBox("Theta (4-8 Hz)")
         self.theta_cb.toggled.connect(self.theta_toggled.emit)
-
-        self.alpha_cb = QCheckBox("Show Alpha (8-13 Hz)")
+        self.alpha_cb = QCheckBox("Alpha (8-13 Hz)")
         self.alpha_cb.toggled.connect(self.alpha_toggled.emit)
-
-        self.beta_cb = QCheckBox("Show Beta (13-30 Hz)")
+        self.beta_cb = QCheckBox("Beta (13-30 Hz)")
         self.beta_cb.toggled.connect(self.beta_toggled.emit)
-
-        self.gamma_cb = QCheckBox("Show Gamma (30-100 Hz)")
+        self.gamma_cb = QCheckBox("Gamma (30-100 Hz)")
         self.gamma_cb.toggled.connect(self.gamma_toggled.emit)
 
-        self.peaks_cb = QCheckBox("Show Peaks")
+        self.peaks_cb = QCheckBox("Show Detected Peaks")
         self.peaks_cb.toggled.connect(self.peaks_toggled.emit)
 
         analysis_layout.addWidget(self.delta_cb)
@@ -99,24 +133,70 @@ class ControlPanel(QWidget):
         analysis_layout.addWidget(self.peaks_cb)
 
         analysis_group.setLayout(analysis_layout)
-        layout.addWidget(analysis_group)
+        self.layout.addWidget(analysis_group)
 
-        # --- Data Controls ---
-        data_group = QGroupBox("Data Management")
-        data_layout = QVBoxLayout()
-        self.load_btn = QPushButton("Load Data File...")
-        self.load_btn.clicked.connect(self.load_clicked.emit)
-        data_layout.addWidget(self.load_btn)
-        data_group.setLayout(data_layout)
+    def _init_advanced_controls(self):
+        adv_group = QGroupBox("Advanced Analysis & Artifacts")
+        adv_layout = QVBoxLayout()
 
-        layout.addWidget(data_group)
+        # System Theme
+        self.theme_cb = QCheckBox("Dark Mode")
+        self.theme_cb.setChecked(True)
+        self.theme_cb.toggled.connect(self.theme_toggled.emit)
+        adv_layout.addWidget(self.theme_cb)
 
-        # --- Validation ---
-        self.val_btn = QPushButton("System Status & Validation")
-        self.val_btn.clicked.connect(self.validation_clicked.emit)
-        layout.addWidget(self.val_btn)
+        # Artifact Removal
+        self.btn_ica = QPushButton("Auto-Remove Artifacts (ICA)")
+        self.btn_ica.setToolTip("Uses Independent Component Analysis to remove the first component (often blinks).")
+        self.btn_ica.clicked.connect(self.ica_requested.emit)
+        adv_layout.addWidget(self.btn_ica)
 
-        layout.addStretch()
+        # Features
+        self.btn_features = QPushButton("Extract Signal Features")
+        self.btn_features.setToolTip("Calculate Band Powers and Signal Complexity.")
+        self.btn_features.clicked.connect(self.features_requested.emit)
+        adv_layout.addWidget(self.btn_features)
+
+        adv_group.setLayout(adv_layout)
+        self.layout.addWidget(adv_group)
+
+    def update_system_stats(self):
+        # Memory
+        process = psutil.Process()
+        mem_info = process.memory_info()
+        mem_mb = mem_info.rss / 1024 / 1024
+        self.lbl_memory.setText(f"Memory: {mem_mb:.1f} MB")
+
+        # Uptime
+        uptime = int(time.time() - self.start_time)
+        hours, remainder = divmod(uptime, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.lbl_uptime.setText(f"Uptime: {hours:02}:{minutes:02}:{seconds:02}")
+
+    def run_benchmark(self):
+        """Runs the validator logic in place."""
+        self.btn_benchmark.setText("Running...")
+        self.btn_benchmark.setEnabled(False)
+        self.repaint()  # Force update
+
+        try:
+            # Run validation on synthetic data
+            # 10 seconds of 250Hz noise + sine
+            import numpy as np
+            t = np.linspace(0, 10, 2500)
+            data = np.sin(2 * np.pi * 10 * t) + np.random.normal(0, 0.5, len(t))
+
+            # Compare Filters
+            res = Validator.compare_filters(data, 250.0, 1.0, 40.0)
+            mse = res['mse']
+
+            self.lbl_mse.setText(f"Filter Accuracy (MSE): {mse:.2e}")
+        except Exception as e:
+            self.lbl_mse.setText("Error")
+            print(e)
+        finally:
+            self.btn_benchmark.setText("Run Filter Benchmark")
+            self.btn_benchmark.setEnabled(True)
 
     def update_ui_state(self, filter_state: FilterState, analysis_state: AnalysisState):
         """
