@@ -5,6 +5,9 @@ import pyqtgraph as pg
 import numpy as np
 import mne
 
+# Enable OpenGL acceleration for better performance
+pg.setConfigOptions(useOpenGL=True, enableExperimental=True)
+
 from src.core.data_manager import DataManager
 from src.gui.spectrum_window import SpectrumWindow
 from src.core.processor import SignalProcessor
@@ -53,7 +56,7 @@ class PlotWidget(QWidget):
         self.layout.addWidget(self.plot_item)
 
         # Signal Proxy for Hover
-        self.proxy = pg.SignalProxy(self.plot_item.scene().sigMouseMoved, rateLimit=60, slot=self.on_mouse_move)
+        self.proxy = pg.SignalProxy(self.plot_item.scene().sigMouseMoved, rateLimit=30, slot=self.on_mouse_move)
 
         self.raw_data = None
         self.processed_data = None
@@ -226,8 +229,11 @@ class PlotWidget(QWidget):
         scale, unit = self._get_scale_and_unit()
         data = rhythm_raw.get_data()[self.current_ch_index] * scale
         times = rhythm_raw.times
+        
+        # Downsample for performance if data is large
+        times_plot, data_plot = self._downsample_for_plot(times, data)
 
-        curve = self.plot_item.plot(times, data, pen=pg.mkPen(band.color, width=2))
+        curve = self.plot_item.plot(times_plot, data_plot, pen=pg.mkPen(band.color, width=2))
         self.rhythm_curves[rhythm_type] = curve
 
         self.plot_item.setLabel('left', f"Amplitude ({unit})")
@@ -311,6 +317,14 @@ class PlotWidget(QWidget):
             self.plot_item.setBackground('w')
         self.update_plot()
 
+    def _downsample_for_plot(self, times, data, max_points=10000):
+        if len(data) <= max_points:
+            return times, data
+        
+        # Use every nth point to reduce to approximately max_points
+        step = len(data) // max_points
+        return times[::step], data[::step]
+
     def update_plot(self):
         if self.processed_data is None: return
 
@@ -331,8 +345,11 @@ class PlotWidget(QWidget):
             else:
                 valid_data = valid_data * scale
                 self.plot_item.setLabel('left', f"Amplitude ({unit})")
+            
+            # Downsample for performance
+            times_plot, data_plot = self._downsample_for_plot(times, valid_data)
 
             pen_color = '#dddddd' if hasattr(self, 'is_dark') and self.is_dark else '#050505'
-            self.main_curve = self.plot_item.plot(times, valid_data, pen=pen_color)
+            self.main_curve = self.plot_item.plot(times_plot, data_plot, pen=pen_color)
         else:
             self.label.setText("Error: Channel Index Out of Bounds")

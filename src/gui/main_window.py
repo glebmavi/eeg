@@ -2,6 +2,11 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QMessageBox,
                              QSplitter, QFileDialog, QInputDialog, QDialog, QApplication, QToolBar)
 from PyQt6.QtGui import QAction
 from PyQt6.QtCore import Qt
+import pyqtgraph as pg
+
+# Configure pyqtgraph for performance
+pg.setConfigOptions(useOpenGL=True, enableExperimental=True, antialias=True)
+
 from src.gui.control_panel import ControlPanel
 from src.gui.plot_widget import PlotWidget
 from src.gui.theme_manager import ThemeManager
