@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Tuple
 
 @dataclass(frozen=True)
 class FrequencyBand:
@@ -28,3 +27,21 @@ class RhythmBands:
             if band.name == name_lower:
                 return band
         return None
+
+@dataclass
+class FilterState:
+    """Mutable state for signal processing filters."""
+    notch: bool = False
+    detrend: bool = False
+    l_freq: float = 1.0
+    h_freq: float = 40.0
+
+@dataclass
+class AnalysisState:
+    """Mutable state for interactive analysis toggles."""
+    delta: bool = False
+    theta: bool = False
+    alpha: bool = False
+    beta: bool = False
+    gamma: bool = False
+    peaks: bool = False

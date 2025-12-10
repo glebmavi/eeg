@@ -100,6 +100,9 @@ class MainWindow(QMainWindow):
             view.set_active(is_active)
             if is_active:
                 self.active_view_index = i
+                # Sync Control Panel with the active view's state
+                f_state, a_state = view.get_state()
+                self.control_panel.update_ui_state(f_state, a_state)
 
     def split_view(self, view_widget, orientation):
         """Splits the view_widget, enforcing max 4 views."""
@@ -187,6 +190,11 @@ class MainWindow(QMainWindow):
             final_name = manager.add_signal(name, raw)
             
             self._select_loaded_signal(name)
+            
+            # Since loading data resets the view's local state, update the panel immediately
+            if self.active_view_index is not None:
+                view = self.views[self.active_view_index]
+                self.control_panel.update_ui_state(*view.get_state())
                 
             QMessageBox.information(self, "Success", f"Loaded {final_name}")
             
