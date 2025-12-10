@@ -9,6 +9,7 @@ from src.core.data_manager import DataManager
 from src.gui.spectrum_window import SpectrumWindow
 from src.core.processor import SignalProcessor
 from src.models.types import RhythmBands, FilterState, AnalysisState
+from src.gui.custom_axis import PaddedBottomAxis
 
 
 class PlotWidget(QWidget):
@@ -43,10 +44,12 @@ class PlotWidget(QWidget):
         self.layout.addWidget(self.top_bar)
 
         # PyQtGraph Plot
-        self.plot_item = pg.PlotWidget()
+        self.plot_item = pg.PlotWidget(axisItems={'bottom': PaddedBottomAxis(orientation='bottom')})
         self.plot_item.setBackground('w')
         self.plot_item.showGrid(x=True, y=True)
         self.plot_item.setLabel('bottom', "Time (s)")
+
+        self.plot_item.getPlotItem().setContentsMargins(5, 5, 5, 20)
         self.layout.addWidget(self.plot_item)
 
         # Signal Proxy for Hover
