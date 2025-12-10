@@ -14,6 +14,7 @@ from src.core.loader import DataLoader
 from src.core.data_manager import DataManager
 from src.gui.import_dialog import ImportDialog
 from src.core.processor import SignalProcessor
+from src.models.types import AnalysisState
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -163,11 +164,22 @@ class MainWindow(QMainWindow):
         if not file_path: return
 
         try:
-            sfreq, time_col, unit_scale, description = self._get_import_config(file_path)
+            sfreq, time_col, unit_scale, description, channel_types = self._get_import_config(file_path)
             if sfreq is None: return
 
             raw = DataLoader.load_data(file_path, sfreq=sfreq, time_col=time_col,
                                        unit_scale=unit_scale, description=description)
+
+            # Apply Channel Types if provided
+            if channel_types:
+                try:
+                    # Filter channel_types to only include channels that actually exist in raw
+                    # (Prevent errors if load_data excluded some or renamed)
+                    valid_types = {k: v for k, v in channel_types.items() if k in raw.ch_names}
+                    if valid_types:
+                        raw.set_channel_types(valid_types)
+                except Exception as e:
+                    print(f"Warning: Failed to set channel types: {e}")
 
             name = file_path.split("/")[-1]
             manager = DataManager()
@@ -187,23 +199,32 @@ class MainWindow(QMainWindow):
         time_col = None
         unit_scale = 1.0
         description = None
+        channel_types = {}
+
+        # Always show dialog for mapping channels, or at least for CSV and now EDF too
+        # Logic: If CSV, we need full config. If EDF, we just want channel mapping (time/unit might be disabled).
+        # We can just always show it for now as per requirement to support channel selection.
+        dlg = ImportDialog(file_path, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None, None, None, None, None
+            
+        time_col, unit_str, channel_types = dlg.get_settings()
+        
+        # Unit Scale Logic only applies to CSV really, but we'll return it regardless.
+        # Loader for EDF ignores unit_scale usually as EDF has its own, but we can check if needed.
+        # For this refactor, let's assume unit_scale only for CSV.
+        if unit_str == "Microvolts (uV)":
+            unit_scale = 1e-6
+        elif unit_str == "Raw/ADC":
+            unit_scale = 1.0
+            description = "Raw/ADC"
 
         if file_path.lower().endswith('.csv'):
-            dlg = ImportDialog(file_path, self)
-            if dlg.exec() != QDialog.DialogCode.Accepted:
-                return None, None, None, None
-            time_col, unit_str = dlg.get_settings()
-            if unit_str == "Microvolts (uV)":
-                unit_scale = 1e-6
-            elif unit_str == "Raw/ADC":
-                unit_scale = 1.0
-                description = "Raw/ADC"
-
             val, ok = QInputDialog.getDouble(self, "Sampling Frequency", "Hz:", 250.0, 0.1, 10000.0)
-            if not ok: return None, None, None, None
+            if not ok: return None, None, None, None, None
             sfreq = val
 
-        return sfreq, time_col, unit_scale, description
+        return sfreq, time_col, unit_scale, description, channel_types
 
     def _select_loaded_signal(self, name_prefix):
         if self.active_view_index is not None and self.active_view_index < len(self.views):
@@ -259,6 +280,11 @@ class MainWindow(QMainWindow):
             # We will replace raw_data with cleaned data for this session?
             # Usually ICA is a preprocessing step. Let's update raw_data so filters apply to clean data.
             view.raw_data = cleaned
+            
+            # Reset analysis state (active rhythms/peaks) as data has changed significantly
+            view.analysis_state = AnalysisState() 
+            self.control_panel.update_ui_state(view.filter_state, view.analysis_state)
+            
             view.apply_processing(view.get_state()[0].__dict__)  # Re-apply current filters
 
             QApplication.restoreOverrideCursor()

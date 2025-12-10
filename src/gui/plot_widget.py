@@ -219,9 +219,8 @@ class PlotWidget(QWidget):
         band = RhythmBands.get_band(rhythm_type)
         if not band: return
 
-        rhythm_raw = self.processed_data.copy()
         try:
-            rhythm_raw.filter(band.low, band.high, verbose=False)
+            rhythm_raw = SignalProcessor.apply_filter(self.processed_data, band.low, band.high)
         except Exception as e:
             print(f"Filter error for {rhythm_type}: {e}")
             return
@@ -351,5 +350,14 @@ class PlotWidget(QWidget):
 
             pen_color = '#dddddd' if hasattr(self, 'is_dark') and self.is_dark else '#050505'
             self.main_curve = self.plot_item.plot(times_plot, data_plot, pen=pen_color)
+            
+            # Restore Analysis Visualizations (Rhythms & Peaks)
+            if self.analysis_state.delta: self.toggle_rhythm('delta', True)
+            if self.analysis_state.theta: self.toggle_rhythm('theta', True)
+            if self.analysis_state.alpha: self.toggle_rhythm('alpha', True)
+            if self.analysis_state.beta: self.toggle_rhythm('beta', True)
+            if self.analysis_state.gamma: self.toggle_rhythm('gamma', True)
+            if self.analysis_state.peaks: self.toggle_peaks(True)
+
         else:
             self.label.setText("Error: Channel Index Out of Bounds")

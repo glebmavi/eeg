@@ -9,8 +9,20 @@ class SignalProcessor:
 
     @staticmethod
     def apply_filter(raw: mne.io.BaseRaw, l_freq: float, h_freq: float, method: str = 'iir') -> mne.io.BaseRaw:
-        """Apply bandpass filter to signal."""
+        """Apply bandpass filter to signal with Nyquist safety checks."""
         inst = raw.copy()
+        sfreq = inst.info['sfreq']
+        nyquist = sfreq / 2.0
+        
+        # Nyquist Check
+        if h_freq >= nyquist:
+            print(f"Warning: High frequency {h_freq}Hz exceeds/equals Nyquist ({nyquist}Hz). Clamping.")
+            h_freq = nyquist - 0.5  # Clamp slightly below Nyquist
+            
+        if h_freq <= l_freq:
+            print(f"Warning: Adjusted High freq ({h_freq}) <= Low freq ({l_freq}). Skipping filter.")
+            return inst
+
         inst.filter(l_freq, h_freq, method=method, verbose=False)
         return inst
 
@@ -18,7 +30,15 @@ class SignalProcessor:
     def apply_notch(raw: mne.io.BaseRaw, freqs: np.ndarray | list) -> mne.io.BaseRaw:
         """Remove specific frequency components (50Hz line noise)."""
         inst = raw.copy()
-        inst.notch_filter(freqs=freqs, verbose=False)
+        sfreq = inst.info['sfreq']
+        nyquist = sfreq / 2.0
+        
+        valid_freqs = [f for f in freqs if f < nyquist]
+        if not valid_freqs:
+            print(f"Warning: All notch frequencies {freqs} >= Nyquist ({nyquist}). Skipping notch.")
+            return inst
+            
+        inst.notch_filter(freqs=valid_freqs, verbose=False)
         return inst
 
     @staticmethod
@@ -32,26 +52,44 @@ class SignalProcessor:
     def apply_ica(raw: mne.io.BaseRaw, n_components: int = 15, random_state=97) -> mne.io.BaseRaw:
         """Apply ICA to remove artifacts (e.g., eye blinks, muscle noise).
         
-        Uses FastICA with automatic exclusion of the first component, which often
-        captures prominent artifacts. In production, component selection should be
-        based on correlation with EOG/ECG channels.
-        TODO: rewrite this apply ica, to allow user to mark some channels as non eeg (to get artifacts), then use them for ica. This requires changing the loader for ALL data formats, to create a dictionary of channels, which are non eeg.
+        Uses FastICA. If EOG or ECG channels are defined, it attempts to find and
+        exclude components correlated with them. Otherwise, it excludes the first
+        component by default (often blinks).
         """
         inst = raw.copy()
         ica_fit_raw = inst.copy().filter(l_freq=1.0, h_freq=None, verbose=False)
 
-        # Determine components (min of n_channels or n_components)
-        n_ch = len(inst.ch_names)
-        n_comp = min(n_ch, n_components)
+        # Determine components based on valid data channels (excluding bads/non-data)
+        picks = mne.pick_types(inst.info, meg=True, eeg=True, eog=False, ecg=False, 
+                               stim=False, exclude='bads')
+        n_comp = min(len(picks), n_components)
+        
         if n_comp < 2:
             return inst  # Cannot do ICA with < 2 channels/components efficiently
 
         ica = mne.preprocessing.ICA(n_components=n_comp, random_state=random_state, method='fastica')
         ica.fit(ica_fit_raw, verbose=False)
 
-        # Heuristic: Exclude the first component (often blinks/cardiac if prominent)
-        # In a real scenario, we would correlate with EOG/ECG channels.
-        ica.exclude = [0]
+        # Artifact Detection
+        exclude_inds = []
+        
+        # 1. EOG (Eye Blinks)
+        if 'eog' in inst.get_channel_types():
+            eog_inds, _ = ica.find_bads_eog(inst, verbose=False)
+            if eog_inds:
+                exclude_inds.extend(eog_inds)
+        
+        # 2. ECG (Heartbeat)
+        if 'ecg' in inst.get_channel_types():
+            ecg_inds, _ = ica.find_bads_ecg(inst, verbose=False)
+            if ecg_inds:
+                exclude_inds.extend(ecg_inds)
+
+        # 3. Fallback: Exclude first component if nothing else found
+        if not exclude_inds:
+            exclude_inds = [0]
+
+        ica.exclude = list(set(exclude_inds))  # Deduplicate
 
         return ica.apply(inst, verbose=False)
 

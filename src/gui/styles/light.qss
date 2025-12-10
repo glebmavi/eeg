@@ -64,24 +64,24 @@ QCheckBox {
 QCheckBox::indicator {
     width: 18px;
     height: 18px;
-    border: 2px solid #b0b0b0;
+    border: 2px solid #222222;
     border-radius: 4px;
     background-color: #ffffff;
 }
 
 QCheckBox::indicator:hover {
-    border: 2px solid #909090;
-    background-color: #f8f8f8;
+    border: 2px solid #000000;
+    background-color: #f0f0f0;
 }
 
 QCheckBox::indicator:checked {
-    background-color: #d0d0d0;
-    border: 2px solid #a0a0a0;
+    background-color: #000000;
+    border: 2px solid #000000;
 }
 
 QCheckBox::indicator:checked:hover {
-    background-color: #c0c0c0;
-    border: 2px solid #909090;
+    background-color: #333333;
+    border: 2px solid #000000;
 }
 
 QLineEdit, QSpinBox, QDoubleSpinBox {
