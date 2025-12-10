@@ -3,27 +3,21 @@ from PyQt6.QtWidgets import QApplication
 import sys
 import numpy as np
 import mne
-import tempfile
-import os
-from pathlib import Path
 from src.core.data_manager import DataManager
+
 
 @pytest.fixture(scope="session")
 def qapp():
-    """
-    Fixture to ensure a QApplication exists for the entire test session.
-    Required for any PyQt widgets.
-    """
+    """Provide QApplication instance for the entire test session."""
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
     return app
 
+
 @pytest.fixture
 def clean_data_manager():
-    """
-    Ensures DataManager singleton is clean before and after each test.
-    """
+    """Ensure DataManager singleton is clean before and after each test."""
     dm = DataManager()
     dm.signals = {}
     dm.listeners = []
@@ -33,11 +27,7 @@ def clean_data_manager():
 
 @pytest.fixture
 def temp_csv_file(tmp_path):
-    """
-    Creates a temporary CSV file with configurable EEG-like data.
-    
-    Returns a callable that creates CSV files with specified parameters.
-    """
+    """Create temporary CSV files with configurable EEG-like data."""
     def _create_csv(n_channels=3, n_samples=100, include_time=True, 
                     include_noise=False, channel_prefix="Ch"):
         file_path = tmp_path / "test_data.csv"
@@ -70,24 +60,10 @@ def temp_csv_file(tmp_path):
 
 @pytest.fixture
 def sample_raw_data():
-    """
-    Provides MNE Raw objects with known signals for testing.
-    
-    Returns a callable that creates Raw objects with specified parameters.
-    """
+    """Create MNE Raw objects with configurable test signals."""
     def _create_raw(n_channels=1, n_samples=1000, sfreq=250.0, 
                     signal_type='sine', freq=10.0, amplitude=1.0):
-        """
-        Create a sample MNE Raw object.
-        
-        Args:
-            n_channels: Number of channels
-            n_samples: Number of samples
-            sfreq: Sampling frequency
-            signal_type: 'sine', 'noise', 'peaks', 'flat', 'composite'
-            freq: Frequency for sine wave (Hz)
-            amplitude: Signal amplitude
-        """
+        """Generate MNE Raw with specified signal type (sine/noise/peaks/flat/composite)."""
         t = np.arange(n_samples) / sfreq
         data = np.zeros((n_channels, n_samples))
         
@@ -119,9 +95,7 @@ def sample_raw_data():
 
 @pytest.fixture
 def sample_signals():
-    """
-    Provides various pre-defined signal arrays for testing signal processing.
-    """
+    """Provide pre-defined signal arrays for signal processing tests."""
     sfreq = 250.0
     duration = 2.0  # seconds
     n_samples = int(sfreq * duration)
@@ -139,11 +113,10 @@ def sample_signals():
         'sfreq': sfreq
     }
 
+
 @pytest.fixture
 def temp_edf_file(tmp_path, sample_raw_data):
-    """
-    Creates a temporary EDF file for testing.
-    """
+    """Create temporary EDF files for testing."""
     def _create_edf(n_channels=2, n_samples=500):
         file_path = tmp_path / "test_data.edf"
         raw = sample_raw_data(n_channels=n_channels, n_samples=n_samples, signal_type='sine')

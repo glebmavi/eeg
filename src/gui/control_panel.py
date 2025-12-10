@@ -27,27 +27,20 @@ class ControlPanel(QWidget):
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        # --- System Monitor ---
         self._init_system_monitor()
-
-        # --- Filter Group ---
         self._init_filter_controls()
-
-        # --- Analysis Group ---
         self._init_analysis_controls()
-
-        # --- Advanced Processing (Artifacts & Features) ---
         self._init_advanced_controls()
 
         self.layout.addStretch()
 
-        # Timer for real-time stats
         self.start_time = time.time()
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_system_stats)
-        self.timer.start(1000)  # Update every second
+        self.timer.start(1000)
 
     def _init_system_monitor(self):
+        """Initialize real-time system resource monitoring panel."""
         monitor_group = QGroupBox("System Status")
         monitor_layout = QFormLayout()
 
@@ -61,6 +54,7 @@ class ControlPanel(QWidget):
         self.layout.addWidget(monitor_group)
 
     def _init_filter_controls(self):
+        """Initialize signal preprocessing controls (notch, detrend, bandpass)."""
         filter_group = QGroupBox("Signal Pre-processing")
         filter_layout = QFormLayout()
 
@@ -89,10 +83,10 @@ class ControlPanel(QWidget):
         self.layout.addWidget(filter_group)
 
     def _init_analysis_controls(self):
+        """Initialize rhythm band visualization toggles (delta, theta, alpha, beta, gamma)."""
         analysis_group = QGroupBox("Rhythm Visualization")
         analysis_layout = QVBoxLayout()
 
-        # Rhythm Visualization Controls
         b = RhythmBands
 
         self.delta_cb = QCheckBox(f"Delta ({b.DELTA.low}-{b.DELTA.high} Hz)")
@@ -124,6 +118,7 @@ class ControlPanel(QWidget):
         self.layout.addWidget(analysis_group)
 
     def _init_advanced_controls(self):
+        """Initialize advanced processing controls (ICA, feature extraction)."""
         adv_group = QGroupBox("Advanced Analysis & Artifacts")
         adv_layout = QVBoxLayout()
 
@@ -143,13 +138,11 @@ class ControlPanel(QWidget):
         self.layout.addWidget(adv_group)
 
     def update_system_stats(self):
-        # Memory
+        """Update memory usage and uptime displays."""
         process = psutil.Process()
-        mem_info = process.memory_info()
-        mem_mb = mem_info.rss / 1024 / 1024
+        mem_mb = process.memory_info().rss / 1024 / 1024
         self.lbl_memory.setText(f"Memory: {mem_mb:.1f} MB")
 
-        # Uptime
         uptime = int(time.time() - self.start_time)
         hours, remainder = divmod(uptime, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -157,10 +150,7 @@ class ControlPanel(QWidget):
 
 
     def update_ui_state(self, filter_state: FilterState, analysis_state: AnalysisState):
-        """
-        Updates the UI elements to reflect the state of the active view.
-        Blocks signals to prevent triggering processing loops.
-        """
+        """Synchronize UI controls with active view state, blocking signals to prevent loops."""
         self.blockSignals(True)
         try:
             # Update Filters

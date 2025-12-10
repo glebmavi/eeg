@@ -1,11 +1,10 @@
 import mne
 import itertools
 
+
 class DataManager:
-    """
-    Singleton shared state for managing loaded datasets.
-    Stores MNE Raw objects keyed by unique identifier.
-    """
+    """Singleton for managing loaded EEG datasets."""
+    
     _instance = None
     
     def __new__(cls):
@@ -15,8 +14,8 @@ class DataManager:
             cls._instance.listeners = [] # List of callables
         return cls._instance
 
-    def add_signal(self, name: str, raw: mne.io.BaseRaw):
-        """Add a new signal, ensuring unique naming."""
+    def add_signal(self, name: str, raw: mne.io.BaseRaw) -> str:
+        """Add a signal with automatic name deduplication."""
         base_name = name
         counter = itertools.count(1)
         
@@ -54,5 +53,6 @@ class DataManager:
         return channels
 
     def notify_listeners(self):
+        """Notify all registered listeners of data changes."""
         for callback in self.listeners:
             callback()

@@ -45,13 +45,12 @@ class ImportDialog(QDialog):
         self._load_preview()
 
     def _load_preview(self):
+        """Load and display data preview with heuristics."""
         try:
             if self.file_path.lower().endswith('.csv'):
                 self.df = pd.read_csv(self.file_path, nrows=5)
             elif self.file_path.lower().endswith('.edf'):
-                # For EDF we can't really preview rows easily without MNE logic, 
-                # but EDF usually has units defined. We assume this dialog is mainly for CSV or ambiguous sources.
-                # If EDF, we might skip this or just show minimal info.
+                # TODO: For EDF we need to implement a column preview, or just a channel preview to allow user to select/mark channels.
                 return 
                 
             if self.df is not None:
@@ -63,6 +62,7 @@ class ImportDialog(QDialog):
             QMessageBox.critical(self, "Preview Error", str(e))
 
     def _populate_table(self):
+        """Populate preview table with dataframe contents."""
         self.preview_table.setColumnCount(len(self.df.columns))
         self.preview_table.setRowCount(len(self.df))
         self.preview_table.setHorizontalHeaderLabels(self.df.columns)
@@ -76,27 +76,18 @@ class ImportDialog(QDialog):
         self.time_col_combo.addItems(list(self.df.columns))
 
     def _apply_heuristics(self):
-        # 1. Time Column Detection
+        """Auto-detect time column and data units based on content."""
         time_candidates = ['time', 'sec', 't', 'timestamp']
         for col in self.df.columns:
             if any(cand in col.lower() for cand in time_candidates):
                 self.time_col_combo.setCurrentText(col)
                 break
                 
-        # 2. Unit Detection
-        # Check numerical columns (exclude time if possible)
-        # Flatten sample data
         try:
             sample_data = self.df.select_dtypes(include=[np.number]).values.flatten()
             if len(sample_data) == 0: return
             
-            avg_val = np.mean(np.abs(sample_data))
             max_val = np.max(np.abs(sample_data))
-            
-            # Heuristics from plan:
-            # < 0.01 -> Volts
-            # > 500 -> Raw/ADC
-            # Else -> Microvolts
             
             if max_val < 0.01:
                 self.unit_combo.setCurrentText("Volts")

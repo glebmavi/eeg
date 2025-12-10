@@ -3,40 +3,41 @@ import scipy.signal
 import mne
 from src.models.types import RhythmBands
 
+
 class SignalProcessor:
-    """
-    Handles signal processing tasks: filtering, ICA, Wavelets, and Feature Extraction.
-    """
+    """Signal processing operations: filtering, ICA, wavelets, and feature extraction."""
 
     @staticmethod
     def apply_filter(raw: mne.io.BaseRaw, l_freq: float, h_freq: float, method: str = 'iir') -> mne.io.BaseRaw:
-        """Apply bandpass filter relative to fs."""
+        """Apply bandpass filter to signal."""
         inst = raw.copy()
         inst.filter(l_freq, h_freq, method=method, verbose=False)
         return inst
 
     @staticmethod
     def apply_notch(raw: mne.io.BaseRaw, freqs: np.ndarray | list) -> mne.io.BaseRaw:
-        """Apply notch filter to remove specific frequencies."""
+        """Remove specific frequency components (50Hz line noise)."""
         inst = raw.copy()
         inst.notch_filter(freqs=freqs, verbose=False)
         return inst
 
     @staticmethod
     def detrend_signal(raw: mne.io.BaseRaw) -> mne.io.BaseRaw:
-        """Remove linear trend from the signal channel-wise."""
+        """Remove linear trend from signal."""
         inst = raw.copy()
         inst.apply_function(scipy.signal.detrend, channel_wise=True, verbose=False)
         return inst
 
     @staticmethod
     def apply_ica(raw: mne.io.BaseRaw, n_components: int = 15, random_state=97) -> mne.io.BaseRaw:
-        """
-        Applies Independent Component Analysis (ICA) to remove artifacts.
-        Method: Fits FastICA and automatically excludes the first component (often eye blinks).
+        """Apply ICA to remove artifacts (e.g., eye blinks, muscle noise).
+        
+        Uses FastICA with automatic exclusion of the first component, which often
+        captures prominent artifacts. In production, component selection should be
+        based on correlation with EOG/ECG channels.
+        TODO: rewrite this apply ica, to allow user to mark some channels as non eeg (to get artifacts), then use them for ica. This requires changing the loader for ALL data formats, to create a dictionary of channels, which are non eeg.
         """
         inst = raw.copy()
-        # ICA requires filtering for best fit, typically 1Hz highpass
         ica_fit_raw = inst.copy().filter(l_freq=1.0, h_freq=None, verbose=False)
 
         # Determine components (min of n_channels or n_components)
@@ -60,9 +61,7 @@ class SignalProcessor:
         Calculates relative power in standard EEG bands (Feature Extraction).
         Returns a dictionary of {band_name: relative_power}.
         """
-        # Welch's Periodogram
         freqs, psd = scipy.signal.welch(data, fs=sfreq, nperseg=min(len(data), int(sfreq * 2)))
-
         bands = RhythmBands.all_bands()
 
         total_power = np.sum(psd)
@@ -80,9 +79,7 @@ class SignalProcessor:
 
     @staticmethod
     def detect_peaks(data: np.ndarray, height: float = None, distance: int = None) -> tuple:
-        """Detect peaks in a 1D signal array."""
-        if data is None or len(data) == 0:
-            return np.array([]), {}
-        if np.all(data == data[0]):
+        """Detect peaks in 1D signal using scipy.signal.find_peaks."""
+        if data is None or len(data) == 0 or np.all(data == data[0]):
             return np.array([]), {}
         return scipy.signal.find_peaks(data, height=height, distance=distance)

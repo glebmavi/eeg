@@ -1,15 +1,17 @@
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class FrequencyBand:
-    """Represents a frequency band for EEG analysis."""
+    """EEG frequency band definition with color for visualization."""
     name: str
     low: float
     high: float
     color: str
 
+
 class RhythmBands:
-    """Standard EEG rhythm bands."""
+    """Standard EEG rhythm frequency bands (Delta, Theta, Alpha, Beta, Gamma)."""
     DELTA = FrequencyBand('delta', 0.5, 4.0, 'c')
     THETA = FrequencyBand('theta', 4.0, 8.0, 'm')
     ALPHA = FrequencyBand('alpha', 8.0, 13.0, 'r')
@@ -18,27 +20,31 @@ class RhythmBands:
 
     @classmethod
     def all_bands(cls):
+        """Return list of all defined frequency bands."""
         return [cls.DELTA, cls.THETA, cls.ALPHA, cls.BETA, cls.GAMMA]
 
     @classmethod
     def get_band(cls, name: str) -> FrequencyBand | None:
+        """Get frequency band by name (case-insensitive)."""
         name_lower = name.lower()
         for band in cls.all_bands():
             if band.name == name_lower:
                 return band
         return None
 
+
 @dataclass
 class FilterState:
-    """Mutable state for signal processing filters."""
+    """Signal preprocessing filter configuration."""
     notch: bool = False
     detrend: bool = False
     l_freq: float = 1.0
     h_freq: float = 40.0
 
+
 @dataclass
 class AnalysisState:
-    """Mutable state for interactive analysis toggles."""
+    """Interactive rhythm visualization and peak detection toggles."""
     delta: bool = False
     theta: bool = False
     alpha: bool = False
