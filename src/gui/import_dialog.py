@@ -113,31 +113,5 @@ class ImportDialog(QDialog):
             time_col = None
             
         unit = self.unit_combo.currentText()
-        scaling = 1.0
-        if unit == "Volts":
-            scaling = 1e6
-        elif unit == "Raw/ADC":
-            scaling = 1.0 # No scaling or special handling?? 
-            # Actually user said: "The axis values... seem to be too high... because removing 1e6..."
-            # So if Raw, we probably just want to display as is. 
-            # But MNE stores as Volts. If we input 1024 as volts, it's 1024V. 
-            # If we want 1024 to be 1024 uV, we treat as uV. 
-            # If we want 1024 raw units, we treat as generic. MNE has 'misc' type, or we just trust the value.
-            # Currently system assumes Volts and multiplies by 1e6 for plot.
-            # If unit is Microvolts, we load as 1e-6 Volts into MNE.
-            
-            # Let's clarify:
-            # Loader currently: data = df.values.T -> RawArray(data). MNE treats data as VOLTS by default.
-            # PlotWidget currently: data * 1e6.
-            
-            # Case 1: Input is Volts (e.g. 0.0001). MNE gets 0.0001. Plot gets 100. Correct.
-            # Case 2: Input is uV (e.g. 100). MNE gets 100. Plot gets 100,000,000. WRONG.
-            # Fix: If uV, we must convert to Volts for MNE (divide by 1e6).
-            
-            # Case 3: Input is Raw (e.g. 512). MNE gets 512. Plot gets 512,000,000. WRONG.
-            # Fix: If Raw, we probably want to visualize 512. So we need MNE to store 512e-6 (if we treat as uV) OR 512 (if we treat as V but Plotting doesn't scale).
-            # BUT PlotWidget is hardcoded to * 1e6.
-            # SO: We need to remove hardcoded scaling in PlotWidget AND return a 'plot_scaling' factor from here or store in data.
-            pass
             
         return time_col, unit

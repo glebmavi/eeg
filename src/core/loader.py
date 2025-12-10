@@ -13,6 +13,17 @@ class DataLoader:
                   unit_scale: float = 1.0, exclude_cols: list = None, description: str = None) -> mne.io.BaseRaw:
         """
         Load data from a file and return an MNE Raw object.
+        
+        Args:
+            file_path (str): Path to the data file.
+            sfreq (float): Sampling frequency for CSV files.
+            time_col (Union[str, int, None]): Column name or index to use as time.
+            unit_scale (float): Scaling factor for data values.
+            exclude_cols (list): List of columns to exclude.
+            description (str): Description to add to the MNE info.
+            
+        Returns:
+            mne.io.BaseRaw: Loaded MNE Raw object.
         """
         file_lower = file_path.lower()
         if file_lower.endswith('.csv'):

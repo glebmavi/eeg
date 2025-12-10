@@ -3,7 +3,7 @@ import psutil
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGroupBox, QCheckBox,
                              QLabel, QDoubleSpinBox, QPushButton, QFormLayout, QHBoxLayout)
 from PyQt6.QtCore import pyqtSignal, QTimer
-from src.models.types import FilterState, AnalysisState
+from src.models.types import FilterState, AnalysisState, RhythmBands
 from src.core.validator import Validator
 
 
@@ -110,16 +110,22 @@ class ControlPanel(QWidget):
         analysis_group = QGroupBox("Rhythm Visualization")
         analysis_layout = QVBoxLayout()
 
-        # TODO: use models.types.py for power bands
-        self.delta_cb = QCheckBox("Delta (0.5-4 Hz)")
+        # Rhythm Visualization Controls
+        b = RhythmBands
+
+        self.delta_cb = QCheckBox(f"Delta ({b.DELTA.low}-{b.DELTA.high} Hz)")
         self.delta_cb.toggled.connect(self.delta_toggled.emit)
-        self.theta_cb = QCheckBox("Theta (4-8 Hz)")
+        
+        self.theta_cb = QCheckBox(f"Theta ({b.THETA.low}-{b.THETA.high} Hz)")
         self.theta_cb.toggled.connect(self.theta_toggled.emit)
-        self.alpha_cb = QCheckBox("Alpha (8-13 Hz)")
+        
+        self.alpha_cb = QCheckBox(f"Alpha ({b.ALPHA.low}-{b.ALPHA.high} Hz)")
         self.alpha_cb.toggled.connect(self.alpha_toggled.emit)
-        self.beta_cb = QCheckBox("Beta (13-30 Hz)")
+        
+        self.beta_cb = QCheckBox(f"Beta ({b.BETA.low}-{b.BETA.high} Hz)")
         self.beta_cb.toggled.connect(self.beta_toggled.emit)
-        self.gamma_cb = QCheckBox("Gamma (30-100 Hz)")
+        
+        self.gamma_cb = QCheckBox(f"Gamma ({b.GAMMA.low}-{b.GAMMA.high} Hz)")
         self.gamma_cb.toggled.connect(self.gamma_toggled.emit)
 
         self.peaks_cb = QCheckBox("Show Detected Peaks")

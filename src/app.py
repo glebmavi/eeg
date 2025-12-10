@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QApplication
 from gui.main_window import MainWindow
 from gui.theme_manager import ThemeManager
 
-def main():
+def main() -> None:
     app = QApplication(sys.argv)
     
     ThemeManager.apply_theme(app, "dark")

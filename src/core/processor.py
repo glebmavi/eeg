@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.signal
 import mne
+from src.models.types import RhythmBands
 
 class SignalProcessor:
     """
@@ -62,24 +63,18 @@ class SignalProcessor:
         # Welch's Periodogram
         freqs, psd = scipy.signal.welch(data, fs=sfreq, nperseg=min(len(data), int(sfreq * 2)))
 
-        # Integrate power in bands
-        bands = { # TODO: Use power bands from models.types.py
-            'Delta (0.5-4Hz)': (0.5, 4),
-            'Theta (4-8Hz)': (4, 8),
-            'Alpha (8-13Hz)': (8, 13),
-            'Beta (13-30Hz)': (13, 30),
-            'Gamma (30-100Hz)': (30, 100)
-        }
+        bands = RhythmBands.all_bands()
 
         total_power = np.sum(psd)
         if total_power == 0:
             return {k: 0.0 for k in bands}
 
         features = {}
-        for name, (low, high) in bands.items():
-            idx = np.logical_and(freqs >= low, freqs <= high)
+        for band in bands:
+            label = f"{band.name.capitalize()} ({band.low}-{band.high}Hz)"
+            idx = np.logical_and(freqs >= band.low, freqs <= band.high)
             band_power = np.sum(psd[idx])
-            features[name] = band_power / total_power
+            features[label] = band_power / total_power
 
         return features
 

@@ -12,6 +12,10 @@ from src.models.types import RhythmBands, FilterState, AnalysisState
 
 
 class PlotWidget(QWidget):
+    """
+    Widget for visualizing EEG signals. 
+    Handles plotting, interactions (zoom/pan), and visual analysis overlays (peaks, rhythms).
+    """
     clicked = pyqtSignal()
     split_requested = pyqtSignal(QWidget, Qt.Orientation)
     close_requested = pyqtSignal(QWidget)
