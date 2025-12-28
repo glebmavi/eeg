@@ -51,7 +51,7 @@ class TestSignalFiltering:
         raw_with_dc = mne.io.RawArray(data, info, verbose=False)
         
         # High-pass filter should remove DC
-        filtered = SignalProcessor.apply_filter(raw_with_dc, l_freq=1.0, h_freq=None)
+        filtered = SignalProcessor.apply_filter(raw_with_dc, l_freq=1.0, h_freq=100.0)
         
         # Mean should be close to 0 after high-pass
         assert abs(np.mean(filtered.get_data())) < abs(np.mean(raw_with_dc.get_data()))

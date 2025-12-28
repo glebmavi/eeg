@@ -483,7 +483,7 @@ class TestImportDialog:
         dialog = ImportDialog(file_path)
         qtbot.addWidget(dialog)
         
-        time_col, unit = dialog.get_settings()
+        time_col, unit, channel_types = dialog.get_settings()
         
         # Should return some values
         assert unit is not None
