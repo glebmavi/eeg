@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import QApplication
-from gui.main_window import MainWindow
-from gui.theme_manager import ThemeManager
+from src.gui.main_window import MainWindow
+from src.gui.theme_manager import ThemeManager
 
 
 def main() -> None:

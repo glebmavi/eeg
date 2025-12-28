@@ -1,11 +1,18 @@
 import os
+import sys
+
 from PyQt6.QtWidgets import QApplication
 
 class ThemeManager:
     """
     Manages application themes using QSS stylesheets.
     """
-    THEME_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "gui", "styles")
+
+    @staticmethod
+    def get_resource_path(relative_path):
+        """ Get absolute path to resource, works for dev and for PyInstaller """
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        return os.path.join(base_path, relative_path)
 
     @staticmethod
     def apply_theme(app: QApplication, theme_name: str = "dark"):
@@ -16,7 +23,7 @@ class ThemeManager:
             app (QApplication): The application instance.
             theme_name (str): Name of the theme (e.g., 'dark', 'light').
         """
-        qss_path = os.path.join(ThemeManager.THEME_DIR, f"{theme_name}.qss")
+        qss_path = ThemeManager.get_resource_path(os.path.join("gui", "styles", f"{theme_name}.qss"))
         
         if os.path.exists(qss_path):
             with open(qss_path, "r") as f:

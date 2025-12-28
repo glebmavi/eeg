@@ -1,0 +1,1 @@
+pyinstaller --noconfirm --onefile --windowed --paths "./src" --collect-all mne --add-data "src/gui/styles;gui/styles" src/app.py -n NeuroVisor --optimize 2
