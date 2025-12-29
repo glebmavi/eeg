@@ -96,22 +96,25 @@ class SignalProcessor:
     @staticmethod
     def extract_band_powers(data: np.ndarray, sfreq: float) -> dict:
         """
-        Calculates relative power in standard EEG bands (Feature Extraction).
-        Returns a dictionary of {band_name: relative_power}.
+        Calculates relative and absolute power in standard EEG bands (Feature Extraction).
+        Returns a dictionary of {band_name: {'relative': float, 'absolute': float}}.
         """
         freqs, psd = scipy.signal.welch(data, fs=sfreq, nperseg=min(len(data), int(sfreq * 2)))
         bands = RhythmBands.all_bands()
 
         total_power = np.sum(psd)
         if total_power == 0:
-            return {k: 0.0 for k in bands}
+            return {f"{band.name.capitalize()} ({band.low}-{band.high}Hz)": {'relative': 0.0, 'absolute': 0.0} for band in bands}
 
         features = {}
         for band in bands:
             label = f"{band.name.capitalize()} ({band.low}-{band.high}Hz)"
             idx = np.logical_and(freqs >= band.low, freqs <= band.high)
             band_power = np.sum(psd[idx])
-            features[label] = band_power / total_power
+            features[label] = {
+                'relative': band_power / total_power,
+                'absolute': band_power
+            }
 
         return features
 

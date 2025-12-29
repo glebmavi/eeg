@@ -3,9 +3,11 @@ import pyqtgraph as pg
 import numpy as np
 import scipy.signal
 import mne
+from src.core.processor import SignalProcessor
+from src.models.types import RhythmBands
 
 class SpectrumWindow(QDialog):
-    def __init__(self, data: np.ndarray, sfreq: float, parent=None):
+    def __init__(self, data: np.ndarray, sfreq: float, parent=None, initial_method: int = 0):
         super().__init__(parent)
         self.setWindowTitle("Spectral Analysis")
         self.resize(900, 600)
@@ -18,7 +20,7 @@ class SpectrumWindow(QDialog):
 
         # Method Selector
         self.combo_method = QComboBox()
-        self.combo_method.addItems(["Power Spectral Density (Welch FFT)", "Time-Frequency (Morlet Wavelet)"])
+        self.combo_method.addItems(["Power Spectral Density (Welch FFT)", "Time-Frequency (Morlet Wavelet)", "Band Power Histogram"])
         self.combo_method.currentIndexChanged.connect(self.update_plot)
         layout.addWidget(QLabel("Analysis Method:"))
         layout.addWidget(self.combo_method)
@@ -33,7 +35,11 @@ class SpectrumWindow(QDialog):
         self.plot_widget.addItem(self.img_item)
         self.img_item.setVisible(False)
 
-        self.update_plot(0)
+        self.img_item.setVisible(False)
+
+        self.combo_method.setCurrentIndex(initial_method)
+        if initial_method == 0:
+            self.update_plot(0)
 
     def update_plot(self, index):
         self.plot_widget.clear()
@@ -86,4 +92,43 @@ class SpectrumWindow(QDialog):
             img.setLookupTable(colormap.getLookupTable())
 
             self.plot_widget.addItem(img)
+            self.plot_widget.autoRange()
+
+        elif index == 2:
+            # Band Power Histogram
+            self.plot_widget.setLabel('left', "Absolute Power (V**2/Hz)")
+            self.plot_widget.setLabel('bottom', "Frequency Bands")
+            
+            features = SignalProcessor.extract_band_powers(self.data, self.sfreq)
+            
+            # Extract data and colors
+            labels = []
+            vals = []
+            brushes = []
+            
+            for k, v in features.items():
+                band_name = k.split(' ')[0]
+                labels.append(band_name)
+                vals.append(v['absolute'])
+                
+                # Get Color
+                band = RhythmBands.get_band(band_name)
+                brushes.append(band.color if band else 'b')
+            
+            x = np.arange(len(vals))
+            
+            # Bar Graph with individual colors
+            bg = pg.BarGraphItem(x=x, height=vals, width=0.6, brushes=brushes)
+            self.plot_widget.addItem(bg)
+            
+            # Custom Axis Labels
+            ax = self.plot_widget.getAxis('bottom')
+            ax.setTicks([list(zip(x, labels))])
+            
+            # Add Value Labels on top of bars
+            for i, val in enumerate(vals):
+                text = pg.TextItem(text=f"{val:.2e}", color='k', anchor=(0.5, 1))
+                text.setPos(i, val)
+                self.plot_widget.addItem(text)
+            
             self.plot_widget.autoRange()

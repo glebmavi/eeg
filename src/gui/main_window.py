@@ -15,10 +15,12 @@ from src.core.data_manager import DataManager
 from src.gui.import_dialog import ImportDialog
 from src.core.processor import SignalProcessor
 from src.models.types import AnalysisState
+from src.gui.spectrum_window import SpectrumWindow
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.spectrum_window = None
         self.setWindowTitle("NeuroVisor - EEG Analysis Environment")
         self.resize(1600, 900)
 
@@ -294,7 +296,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "ICA Error", f"Failed to apply ICA:\n{str(e)}")
 
     def show_features(self):
-        """Calculates and displays features for the current signal."""
+        """Calculates and displays features for the current signal using SpectrumWindow (Histogram)."""
         if self.active_view_index is None: return
         view = self.views[self.active_view_index]
         if view.processed_data is None: return
@@ -303,19 +305,8 @@ class MainWindow(QMainWindow):
             data = view.processed_data.get_data()[view.current_ch_index]
             sfreq = view.processed_data.info['sfreq']
 
-            features = SignalProcessor.extract_band_powers(data, sfreq)
-
-            # Format Text
-            txt = "<b>Relative Band Powers (PSD):</b><br><br>"
-            for band, val in features.items():
-                txt += f"<b>{band}:</b> {val:.2%}<br>"
-
-            # Add basic stats
-            txt += "<br><b>Signal Statistics:</b><br>"
-            txt += f"Mean: {data.mean():.2e}<br>"
-            txt += f"Std Dev: {data.std():.2e}<br>"
-
-            QMessageBox.information(self, "Signal Features", txt)
+            self.spectrum_window = SpectrumWindow(data, sfreq, self, initial_method=2)
+            self.spectrum_window.show()
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Feature extraction failed:\n{e}")
