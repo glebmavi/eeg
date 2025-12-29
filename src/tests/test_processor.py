@@ -194,7 +194,8 @@ class TestBandPowerExtraction:
         sfreq = sample_signals['sfreq']
         
         powers = SignalProcessor.extract_band_powers(data, sfreq)
-        total = sum(powers.values())
+        # powers values are now dicts with 'relative' and 'absolute'
+        total = sum(p['relative'] for p in powers.values())
         
         assert np.isclose(total, 1.0, atol=0.01)
     
@@ -206,8 +207,9 @@ class TestBandPowerExtraction:
         powers = SignalProcessor.extract_band_powers(data, sfreq)
         
         # Alpha band should have the most power for 10Hz signal
-        alpha_power = powers['Alpha (8.0-13.0Hz)']
-        assert alpha_power == max(powers.values())
+        alpha_power = powers['Alpha (8.0-13.0Hz)']['relative']
+        max_power = max(p['relative'] for p in powers.values())
+        assert alpha_power == max_power
     
     def test_band_powers_flat_signal(self, sample_signals):
         """Test band power extraction on flat signal."""
@@ -217,7 +219,9 @@ class TestBandPowerExtraction:
         powers = SignalProcessor.extract_band_powers(data, sfreq)
         
         # All powers should be 0 for flat signal
-        assert all(p == 0.0 for p in powers.values())
+        for p in powers.values():
+            assert p['relative'] == 0.0
+            assert p['absolute'] == 0.0
     
     def test_band_powers_noise_signal(self, sample_signals):
         """Test band power extraction on noise signal."""
@@ -227,7 +231,9 @@ class TestBandPowerExtraction:
         powers = SignalProcessor.extract_band_powers(data, sfreq)
         
         # Powers should be distributed across bands for noise
-        assert all(p >= 0 for p in powers.values())
+        for p in powers.values():
+            assert p['relative'] >= 0
+            assert p['absolute'] >= 0
 
 
 class TestPeakDetection:
