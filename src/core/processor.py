@@ -24,7 +24,8 @@ class SignalProcessor:
             return inst
 
         inst.filter(l_freq, h_freq, method=method, verbose=False)
-        return inst
+
+        return SignalProcessor.normalize_signal(inst, method='minmax')
 
     @staticmethod
     def apply_notch(raw: mne.io.BaseRaw, freqs: np.ndarray | list) -> mne.io.BaseRaw:
@@ -124,3 +125,42 @@ class SignalProcessor:
         if data is None or len(data) == 0 or np.all(data == data[0]):
             return np.array([]), {}
         return scipy.signal.find_peaks(data, height=height, prominence=prominence, distance=distance)
+
+    @staticmethod
+    def normalize_signal(raw: mne.io.BaseRaw, method: str = 'zscore') -> mne.io.BaseRaw:
+        """
+        Normalize signal data.
+        Supported methods:
+        - 'zscore': Subtract mean and divide by standard deviation (standardization).
+        - 'minmax': Scale to range [-1, 1].
+        """
+        inst = raw.copy()
+        data = inst.get_data()
+        
+        if method == 'zscore':
+            # Calculate mean and std for each channel
+            means = np.mean(data, axis=1, keepdims=True)
+            stds = np.std(data, axis=1, keepdims=True)
+            
+            # Avoid division by zero for flat channels
+            stds[stds == 0] = 1.0
+            
+            # Apply Normalization
+            normalized_data = (data - means) / stds
+            
+            # Create new RawArray with normalized data (preserving info)
+            inst = mne.io.RawArray(normalized_data, inst.info, verbose=False)
+            
+        elif method == 'minmax':
+            mins = np.min(data, axis=1, keepdims=True)
+            maxs = np.max(data, axis=1, keepdims=True)
+            
+            ranges = maxs - mins
+            ranges[ranges == 0] = 1.0
+            
+            # Apply MinMax Scaling to [-1, 1]
+            normalized_data = 2 * (data - mins) / ranges - 1
+            
+            inst = mne.io.RawArray(normalized_data, inst.info, verbose=False)
+            
+        return inst
