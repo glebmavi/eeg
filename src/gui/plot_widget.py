@@ -265,13 +265,25 @@ class PlotWidget(QWidget):
         else:
             data_scaled = data * scale
 
-        height = np.std(data_scaled) * 2
-        peaks, _ = SignalProcessor.detect_peaks(data_scaled, height=height, distance=50)
+        times_plot, data_plot = self._downsample_for_plot(times, data_scaled)
+
+        height_threshold = np.percentile(data_plot, 85)
+        prominence_threshold = np.std(data_plot) * 0.3
+
+        sfreq = self.processed_data.info['sfreq']
+        distance = max(1, int((sfreq * 0.1) / (len(data_scaled) / len(data_plot))))
+
+        peaks, _ = SignalProcessor.detect_peaks(
+            data_plot,
+            height=height_threshold,
+            prominence=prominence_threshold,
+            distance=distance
+        )
 
         if len(peaks) > 0:
             self.peak_scatter = pg.ScatterPlotItem(
-                x=times[peaks],
-                y=data_scaled[peaks],
+                x=times_plot[peaks],
+                y=data_plot[peaks],
                 pen='r', brush='r', size=12,
                 hoverable=True,
                 hoverPen='w', hoverBrush='b'

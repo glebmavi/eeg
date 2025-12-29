@@ -116,8 +116,8 @@ class SignalProcessor:
         return features
 
     @staticmethod
-    def detect_peaks(data: np.ndarray, height: float = None, distance: int = None) -> tuple:
+    def detect_peaks(data: np.ndarray, height: float = None, prominence: float = None, distance: int = None) -> tuple:
         """Detect peaks in 1D signal using scipy.signal.find_peaks."""
         if data is None or len(data) == 0 or np.all(data == data[0]):
             return np.array([]), {}
-        return scipy.signal.find_peaks(data, height=height, distance=distance)
+        return scipy.signal.find_peaks(data, height=height, prominence=prominence, distance=distance)
