@@ -183,7 +183,8 @@ class PlotWidget(QWidget):
         l_freq = self.filter_state.l_freq
         h_freq = self.filter_state.h_freq
         if l_freq and h_freq:
-            temp = SignalProcessor.apply_filter(temp, l_freq, h_freq)
+            # IMPORTANT: Main signal view DOES request normalization to [-1, 1]
+            temp = SignalProcessor.apply_filter(temp, l_freq, h_freq, normalize_output=True)
 
         self.processed_data = temp
         self.update_plot()
@@ -220,7 +221,14 @@ class PlotWidget(QWidget):
         if not band: return
 
         try:
-            rhythm_raw = SignalProcessor.apply_filter(self.processed_data, band.low, band.high)
+            # IMPORTANT: Do NOT normalize rhythm extraction.
+            # It should maintain amplitude relative to the main signal.
+            rhythm_raw = SignalProcessor.apply_filter(
+                self.processed_data,
+                band.low,
+                band.high,
+                normalize_output=False
+            )
         except Exception as e:
             print(f"Filter error for {rhythm_type}: {e}")
             return
@@ -228,7 +236,7 @@ class PlotWidget(QWidget):
         scale, unit = self._get_scale_and_unit()
         data = rhythm_raw.get_data()[self.current_ch_index] * scale
         times = rhythm_raw.times
-        
+
         # Downsample for performance if data is large
         times_plot, data_plot = self._downsample_for_plot(times, data)
 
@@ -236,7 +244,6 @@ class PlotWidget(QWidget):
         self.rhythm_curves[rhythm_type] = curve
 
         self.plot_item.setLabel('left', f"Amplitude ({unit})")
-        self.plot_item.autoRange()
 
     def toggle_peaks(self, enabled: bool):
         # Update State
@@ -331,7 +338,7 @@ class PlotWidget(QWidget):
     def _downsample_for_plot(self, times, data, max_points=10000):
         if len(data) <= max_points:
             return times, data
-        
+
         # Use every nth point to reduce to approximately max_points
         step = len(data) // max_points
         return times[::step], data[::step]
@@ -356,13 +363,13 @@ class PlotWidget(QWidget):
             else:
                 valid_data = valid_data * scale
                 self.plot_item.setLabel('left', f"Amplitude ({unit})")
-            
+
             # Downsample for performance
             times_plot, data_plot = self._downsample_for_plot(times, valid_data)
 
             pen_color = '#dddddd' if hasattr(self, 'is_dark') and self.is_dark else '#050505'
             self.main_curve = self.plot_item.plot(times_plot, data_plot, pen=pen_color)
-            
+
             # Restore Analysis Visualizations (Rhythms & Peaks)
             if self.analysis_state.delta: self.toggle_rhythm('delta', True)
             if self.analysis_state.theta: self.toggle_rhythm('theta', True)
