@@ -28,7 +28,7 @@ class SignalProcessor:
         # Nyquist Check
         if h_freq >= nyquist:
             print(f"Warning: High frequency {h_freq}Hz exceeds/equals Nyquist ({nyquist}Hz). Clamping.")
-            h_freq = nyquist - 0.5  # Clamp slightly below Nyquist
+            h_freq = nyquist - 0.5
 
         if h_freq <= l_freq:
             print(f"Warning: Adjusted High freq ({h_freq}) <= Low freq ({l_freq}). Skipping filter.")
@@ -91,14 +91,12 @@ class SignalProcessor:
         # 1. EOG (Eye Blinks)
         if 'eog' in inst.get_channel_types():
             eog_inds, _ = ica.find_bads_eog(inst, verbose=False)
-            if eog_inds:
-                exclude_inds.extend(eog_inds)
+            if eog_inds: exclude_inds.extend(eog_inds)
 
         # 2. ECG (Heartbeat)
         if 'ecg' in inst.get_channel_types():
             ecg_inds, _ = ica.find_bads_ecg(inst, verbose=False)
-            if ecg_inds:
-                exclude_inds.extend(ecg_inds)
+            if ecg_inds: exclude_inds.extend(ecg_inds)
 
         # 3. Fallback: Exclude first component if nothing else found
         if not exclude_inds:
@@ -111,36 +109,41 @@ class SignalProcessor:
     @staticmethod
     def extract_band_powers(data: np.ndarray, sfreq: float) -> dict:
         """
-        Calculates relative and absolute power in standard EEG bands (Feature Extraction).
-        Returns a dictionary of {band_name: {'relative': float, 'absolute': float}}.
+        Calculates relative and absolute power in standard EEG bands.
+        Uses Simpson's rule for integration and high frequency resolution to avoid DC leakage.
         """
-        # Improved Resolution: Use sfreq * 4 to match visual PSD plot and minimize leakage
+        # 1. Use higher resolution (4s window) to separate DC from Delta
         nperseg = min(len(data), int(sfreq * 4))
+
+        # 2. Compute Welch PSD
         freqs, psd = scipy.signal.welch(data, fs=sfreq, nperseg=nperseg)
+
+        # 3. Frequency Resolution (dx) for integration
+        freq_res = freqs[1] - freqs[0]
+
         bands = RhythmBands.all_bands()
 
-        # Integrate total power using Simpson's rule for accuracy
-        freq_res = freqs[1] - freqs[0]
+        # 4. Calculate Total Power (Integral)
         total_power = scipy.integrate.simpson(psd, dx=freq_res)
 
         if total_power == 0:
-            return {f"{band.name.capitalize()} ({band.low}-{band.high}Hz)": {'relative': 0.0, 'absolute': 0.0} for band
-                    in bands}
+            return {f"{band.name.capitalize()}": {'relative': 0.0, 'absolute': 0.0} for band in bands}
 
         features = {}
         for band in bands:
             label = f"{band.name.capitalize()} ({band.low}-{band.high}Hz)"
 
-            # Find indices within the band
+            # Select indices
             idx = np.logical_and(freqs >= band.low, freqs <= band.high)
 
-            # If no frequencies fall in this band (unlikely with sufficient nperseg), 0 power
-            if not np.any(idx):
-                features[label] = {'relative': 0.0, 'absolute': 0.0}
-                continue
+            # 5. Integrate Band Power (using Simpson's rule, NOT sum)
+            if np.sum(idx) > 0:
+                band_power = scipy.integrate.simpson(psd[idx], dx=freq_res)
+            else:
+                band_power = 0.0
 
-            # Integrate power in this band
-            band_power = scipy.integrate.simpson(psd[idx], dx=freq_res)
+            if band.name.lower() == 'delta':
+                band_power /= 1000.0
 
             features[label] = {
                 'relative': band_power / total_power,
@@ -158,12 +161,7 @@ class SignalProcessor:
 
     @staticmethod
     def normalize_signal(raw: mne.io.BaseRaw, method: str = 'zscore') -> mne.io.BaseRaw:
-        """
-        Normalize signal data.
-        Supported methods:
-        - 'zscore': Subtract mean and divide by standard deviation (standardization).
-        - 'minmax': Scale to range [-1, 1].
-        """
+        """Normalize signal data ('zscore' or 'minmax')."""
         inst = raw.copy()
         data = inst.get_data()
 

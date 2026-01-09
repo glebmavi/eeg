@@ -35,8 +35,6 @@ class SpectrumWindow(QDialog):
         self.plot_widget.addItem(self.img_item)
         self.img_item.setVisible(False)
 
-        self.img_item.setVisible(False)
-
         self.combo_method.setCurrentIndex(initial_method)
         if initial_method == 0:
             self.update_plot(0)
@@ -49,7 +47,9 @@ class SpectrumWindow(QDialog):
             self.plot_widget.setLabel('left', "Power Spectral Density (V**2/Hz)")
             self.plot_widget.setLabel('bottom', "Frequency (Hz)")
 
-            freqs, psd = scipy.signal.welch(self.data, fs=self.sfreq, nperseg=min(len(self.data), int(self.sfreq * 4)))
+            # Use consistent nperseg as Processor to match visual
+            nperseg = min(len(self.data), int(self.sfreq * 4))
+            freqs, psd = scipy.signal.welch(self.data, fs=self.sfreq, nperseg=nperseg)
             self.plot_widget.plot(freqs, psd, pen=pg.mkPen('b', width=2))
             self.plot_widget.autoRange()
 
@@ -58,33 +58,28 @@ class SpectrumWindow(QDialog):
             self.plot_widget.setLabel('left', "Frequency (Hz)")
             self.plot_widget.setLabel('bottom', "Time (s)")
 
-            # Define frequencies of interest (e.g., 1 to 50 Hz)
+            # Frequencies 1-50Hz
             freqs = np.arange(1, 50, 1)
             n_cycles = freqs / 2.  # Variable cycles
 
-            # Use MNE's tfr_array_morlet
-            # Input needs to be (n_epochs, n_channels, n_times) -> (1, 1, n_times)
             data_reshaped = self.data[np.newaxis, np.newaxis, :]
 
             power = mne.time_frequency.tfr_array_morlet(
                 data_reshaped, self.sfreq, freqs, n_cycles=n_cycles, output='power'
             )
-            # Power shape: (1, 1, n_freqs, n_times) -> squeeze to (n_freqs, n_times)
             spectrogram = power[0, 0, :, :]
 
-            # Log scale for better visualization
+            # Log scale
             spectrogram = np.log10(spectrogram + 1e-15)
 
             # Create ImageItem
             img = pg.ImageItem()
-            img.setImage(spectrogram.T)  # Transpose for pyqtgraph (x=time, y=freq)
+            img.setImage(spectrogram.T)
 
             # Scale axes
-            # x scale: 1 sample = 1/sfreq seconds
-            # y scale: 1 index = 1 Hz (since np.arange(1, 50, 1))
             tr = pg.QtGui.QTransform()
             tr.scale(1.0 / self.sfreq, 1.0)
-            tr.translate(0, 1.0)  # Start freq at 1
+            tr.translate(0, 1.0)
             img.setTransform(tr)
 
             # Color Map
@@ -95,40 +90,42 @@ class SpectrumWindow(QDialog):
             self.plot_widget.autoRange()
 
         elif index == 2:
-            # Band Power Histogram
-            self.plot_widget.setLabel('left', "Absolute Power (V**2/Hz)")
+            # --- Band Power Histogram ---
+            # Correct label: This is now Integral Power (V^2), not Density
+            self.plot_widget.setLabel('left', "Absolute Power (V**2)")
             self.plot_widget.setLabel('bottom', "Frequency Bands")
-            
+
             features = SignalProcessor.extract_band_powers(self.data, self.sfreq)
-            
+
             # Extract data and colors
             labels = []
             vals = []
             brushes = []
-            
+
             for k, v in features.items():
-                band_name = k.split(' ')[0]
+                # k is "Delta (0.5-4.0Hz)"
+                band_name = k.split(' ')[0]  # "Delta"
                 labels.append(band_name)
                 vals.append(v['absolute'])
-                
+
                 # Get Color
                 band = RhythmBands.get_band(band_name)
                 brushes.append(band.color if band else 'b')
-            
+
             x = np.arange(len(vals))
-            
-            # Bar Graph with individual colors
+
+            # Bar Graph
             bg = pg.BarGraphItem(x=x, height=vals, width=0.6, brushes=brushes)
             self.plot_widget.addItem(bg)
-            
+
             # Custom Axis Labels
             ax = self.plot_widget.getAxis('bottom')
             ax.setTicks([list(zip(x, labels))])
-            
+
             # Add Value Labels on top of bars
             for i, val in enumerate(vals):
                 text = pg.TextItem(text=f"{val:.2e}", color='k', anchor=(0.5, 1))
                 text.setPos(i, val)
                 self.plot_widget.addItem(text)
-            
+
             self.plot_widget.autoRange()
